@@ -1,39 +1,74 @@
-import crypto from "node:crypto";
+// V4-signed URL helper for Cloud Storage objects.
+// Uses Application Default Credentials on Cloud Run (via the runtime SA).
+//
+// Spec §16: every video URL is signed with max 4-hour TTL.
 
-// V4-signed URL helper for Media CDN.
-// Spec §16: every video URL is signed, max 4-hour TTL, never expose raw bucket path.
-// Docs: https://cloud.google.com/media-cdn/docs/sign-requests
+import type { Storage } from "@google-cloud/storage";
 
-const KEY_NAME = process.env.MEDIA_CDN_KEY_NAME ?? "";
-const KEY_BASE64 = process.env.MEDIA_CDN_KEY_VALUE_BASE64 ?? "";
-const HOST = process.env.MEDIA_CDN_HOST ?? "";
+let cachedStorage: Storage | null = null;
 
-function base64UrlEncode(buf: Buffer): string {
-  return buf
-    .toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
+async function getStorage(): Promise<Storage | null> {
+  if (cachedStorage) return cachedStorage;
+  try {
+    const mod = await import("@google-cloud/storage");
+    cachedStorage = new mod.Storage({
+      projectId: process.env.GCP_PROJECT_ID,
+    });
+    return cachedStorage;
+  } catch (err) {
+    console.error("[storage] init failed:", err);
+    return null;
+  }
 }
 
-export function getSignedUrl(
-  path: string,
+export async function getPlaybackUrl(
+  bucket: string,
+  objectPath: string,
   ttlSeconds: number = 4 * 3600,
-  watermark?: string,
-): string {
-  if (!HOST || !KEY_NAME || !KEY_BASE64) {
-    throw new Error("Media CDN signing keys not configured — see .env.example");
+): Promise<string | null> {
+  const storage = await getStorage();
+  if (!storage) return null;
+  try {
+    const [url] = await storage
+      .bucket(bucket)
+      .file(objectPath)
+      .getSignedUrl({
+        version: "v4",
+        action: "read",
+        expires: Date.now() + ttlSeconds * 1000,
+      });
+    return url;
+  } catch (err) {
+    console.error("[storage] signed read URL failed:", err);
+    return null;
   }
-  const expires = Math.floor(Date.now() / 1000) + ttlSeconds;
-  const params = new URLSearchParams({
-    Expires: expires.toString(),
-    KeyName: KEY_NAME,
-  });
-  if (watermark) params.set("Watermark", watermark);
+}
 
-  const stringToSign = `${path}?${params.toString()}`;
-  const key = Buffer.from(KEY_BASE64, "base64");
-  const sig = crypto.createHmac("sha1", key).update(stringToSign).digest();
-  params.set("Signature", base64UrlEncode(sig));
-  return `https://${HOST}${path}?${params.toString()}`;
+export async function getUploadUrl(
+  bucket: string,
+  objectPath: string,
+  contentType: string,
+  ttlSeconds: number = 3600,
+): Promise<string | null> {
+  const storage = await getStorage();
+  if (!storage) return null;
+  try {
+    const [url] = await storage
+      .bucket(bucket)
+      .file(objectPath)
+      .getSignedUrl({
+        version: "v4",
+        action: "write",
+        expires: Date.now() + ttlSeconds * 1000,
+        contentType,
+      });
+    return url;
+  } catch (err) {
+    console.error("[storage] signed write URL failed:", err);
+    return null;
+  }
+}
+
+export function recordingObjectPath(batchId: string, missionId: string): string {
+  return `recordings/${batchId}/${missionId}.mp4`;
 }

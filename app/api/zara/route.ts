@@ -19,10 +19,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Message required (under 500 chars)" }, { status: 400 });
   }
 
-  const useMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === "true" || !process.env.GCP_PROJECT_ID;
-
-  if (!useMock) {
-    // Try Vertex AI Claude. If it returns null, fall back to mock.
+  // Vertex AI Claude is independent from the mock-data flag — if GCP_PROJECT_ID is set
+  // and the runtime SA can call Vertex AI, we use real Claude. Otherwise mock.
+  if (process.env.GCP_PROJECT_ID) {
     const real = await callZara(message);
     if (real) {
       return NextResponse.json({ reply: filterReply(real), via: "vertex" });

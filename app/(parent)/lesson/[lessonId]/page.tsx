@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { CheckCircle2, ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
@@ -20,7 +20,27 @@ export default function LessonPage({ params }: { params: { lessonId: string } })
   // Look up the recording for the parent's batch — different batches see different recordings.
   const recording = getRecordingFor(mission.id, mockUser.batchId);
   const batch = getBatchById(mockUser.batchId);
-  const recordingReady = recording?.status === "ready" && recording.recordingPath;
+  const recordingReadyMock = recording?.status === "ready" && recording.recordingPath;
+
+  // Fetch a real signed playback URL from the API. Falls back to mock path if API returns null.
+  const [signedSrc, setSignedSrc] = useState<string | null>(null);
+  const [signedTried, setSignedTried] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/video/playback-url?lessonId=${encodeURIComponent(params.lessonId)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        if (data?.url) setSignedSrc(data.url);
+        setSignedTried(true);
+      })
+      .catch(() => setSignedTried(true));
+    return () => {
+      cancelled = true;
+    };
+  }, [params.lessonId]);
+
+  const videoSrc = signedSrc ?? (recordingReadyMock ? recording!.recordingPath : null);
 
   const activities = mockActivities.filter((a) => a.missionId === mission.id);
   const allMissions = mockMissions.filter((m) => m.planetId === mission.planetId).sort((a, b) => a.orderIndex - b.orderIndex);
@@ -84,7 +104,7 @@ export default function LessonPage({ params }: { params: { lessonId: string } })
             </h1>
             <p className="text-space-navy/70 font-body">{mission.description}</p>
             <VideoPlayer
-              src={recordingReady ? recording!.recordingPath : null}
+              src={videoSrc}
               watermark={`${mockUser.childName} · AI SuperKids`}
               onComplete={handleVideoComplete}
             />
@@ -97,6 +117,11 @@ export default function LessonPage({ params }: { params: { lessonId: string } })
             {!recording && batch && (
               <p className="text-sm text-space-navy/60 font-body">
                 The recording for {batch.name} hasn't been uploaded yet. Eugene usually posts it within a day of the live session.
+              </p>
+            )}
+            {signedTried && signedSrc && (
+              <p className="text-[10px] text-space-navy/40 font-body">
+                ✓ Streaming via Cloud Storage signed URL · expires in 4 hours
               </p>
             )}
             {completed && (

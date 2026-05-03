@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 
 // Spec §16 — protect /(parent)/* with parent role; /(admin)/* with admin role.
-// In mock mode (default for local dev), all routes pass through.
-// In production, verify Firebase ID token cookie and check role custom claim.
+// Mock mode (default for local dev): all routes pass through.
+// Production:
+//   - Must have a `session` cookie (Firebase ID token)
+//   - We do *shallow* validation here in the Edge runtime (cookie present + non-empty)
+//   - Deep verification (signature + role check) happens in Node-runtime API routes
+//     and server components via verifyIdToken() in lib/firebase/admin.ts.
+//   - Edge can't run firebase-admin (Node-only), so we proxy through.
 
 const PARENT_ROUTES = [
   "/dashboard",
@@ -21,14 +26,12 @@ const ADMIN_ROUTES = ["/admin"];
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Mock mode: skip auth entirely. Defaults to mock when no GCP project is configured,
-  // or can be explicitly forced via NEXT_PUBLIC_USE_MOCK_DATA=true.
-  const isMock =
-    process.env.NEXT_PUBLIC_USE_MOCK_DATA === "true" ||
-    !process.env.GCP_PROJECT_ID;
-  if (isMock) {
-    return NextResponse.next();
-  }
+  // Auth gating is independent from other mock flags. It activates ONLY when the
+  // Firebase client SDK has been configured (NEXT_PUBLIC_FIREBASE_API_KEY present).
+  // This lets the rest of the app run with real Firestore / Vertex AI / Storage
+  // even before someone sets up the Firebase web app config.
+  const authActive = Boolean(process.env.NEXT_PUBLIC_FIREBASE_API_KEY);
+  if (!authActive) return NextResponse.next();
 
   const isParentPath = PARENT_ROUTES.some(
     (p) => pathname === p || pathname.startsWith(p + "/"),
@@ -36,21 +39,17 @@ export async function middleware(req: NextRequest) {
   const isAdminPath = ADMIN_ROUTES.some(
     (p) => pathname === p || pathname.startsWith(p + "/"),
   );
-
   if (!isParentPath && !isAdminPath) return NextResponse.next();
 
   const sessionCookie = req.cookies.get("session")?.value;
-  if (!sessionCookie) {
-    return NextResponse.redirect(new URL("/", req.url));
+  if (!sessionCookie || sessionCookie.length < 50) {
+    // No session — redirect to login.
+    const loginUrl = new URL("/", req.url);
+    return NextResponse.redirect(loginUrl);
   }
 
-  // Verify cookie + role with the Admin SDK in a real implementation.
-  // const admin = await getAdmin();
-  // const decoded = await admin.auth().verifySessionCookie(sessionCookie, true);
-  // const role = decoded.role; // custom claim
-  // if (isAdminPath && role !== "admin") return NextResponse.rewrite(new URL("/404", req.url));
-  // if (isParentPath && role !== "parent") return NextResponse.redirect(new URL("/admin", req.url));
-
+  // Cookie is present; deeper signature + role check happens server-side
+  // (route handlers / server components via lib/firebase/admin.ts).
   return NextResponse.next();
 }
 

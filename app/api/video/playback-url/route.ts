@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getPlaybackUrl, recordingObjectPath } from "@/lib/storage/signer";
+import { getRecordingFor } from "@/lib/data";
+import { getCurrentUser } from "@/lib/data";
 
-// In production this returns a short-lived V4-signed Media CDN URL for the requested lesson.
-// The token includes userId+childName so playback is watermarked and audit-traceable.
-// Spec §16: never expose the raw bucket path — always sign per request.
+// Returns a short-lived V4-signed Cloud Storage URL for the requested lesson's recording.
+// In production: the URL is the actual playback source for the <video> element.
+// In mock mode: returns null + a friendly message.
 
 export async function GET(req: NextRequest) {
   const lessonId = req.nextUrl.searchParams.get("lessonId");
@@ -10,24 +13,32 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "lessonId required" }, { status: 400 });
   }
 
-  const useMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === "true" || !process.env.MEDIA_CDN_HOST;
-
-  if (useMock) {
-    // Return a placeholder URL — the client falls back to mock recordingStoragePath.
+  // Storage signed URLs activate when GCP_PROJECT_ID + VIDEO_BUCKET are set.
+  if (!process.env.GCP_PROJECT_ID || !process.env.VIDEO_BUCKET) {
     return NextResponse.json({
       url: null,
-      expiresAt: new Date(Date.now() + 4 * 3600 * 1000).toISOString(),
-      message: "Mock mode — using local recording paths",
+      message: "No real video storage configured",
     });
   }
 
-  // ---- Real signed URL generation (uncomment once Media CDN keyset configured) ----
-  // import { getSignedUrl } from "@/lib/storage/signer";
-  // const path = `/lessons/${lessonId}.mp4`;
-  // const url = await getSignedUrl(path, /* ttl */ 4 * 3600);
-  // return NextResponse.json({ url, expiresAt: new Date(Date.now() + 4 * 3600 * 1000).toISOString() });
+  const user = await getCurrentUser();
+  const recording = await getRecordingFor(lessonId, user.batchId);
+  if (!recording || recording.status !== "ready") {
+    return NextResponse.json({
+      url: null,
+      message: "No recording for this batch yet",
+    });
+  }
 
-  return NextResponse.json({ url: null, expiresAt: null });
+  const bucket = process.env.VIDEO_BUCKET ?? "ai-superkids-recordings";
+  const path = recordingObjectPath(user.batchId, lessonId);
+  const url = await getPlaybackUrl(bucket, path, 4 * 3600);
+
+  return NextResponse.json({
+    url,
+    expiresAt: new Date(Date.now() + 4 * 3600 * 1000).toISOString(),
+    watermark: `${user.childName} · AI SuperKids`,
+  });
 }
 
 export const runtime = "nodejs";

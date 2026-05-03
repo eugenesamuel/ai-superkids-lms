@@ -45,10 +45,13 @@ export function BatchRecordingsManager({
 
   const ready = rows.filter((r) => r.recording?.status === "ready").length;
 
-  function handleSaveUpload(missionId: string, file: File | null, freePreview: boolean) {
+  async function handleSaveUpload(missionId: string, file: File | null, freePreview: boolean) {
     const m = missions.find((mm) => mm.id === missionId);
     if (!m) return;
+    void freePreview; // not in BatchRecording type yet
     const existing = recordings.find((r) => r.missionId === missionId);
+
+    // Create or update recording row in `processing` state immediately for UI feedback.
     const newRec: BatchRecording = existing
       ? { ...existing, status: "processing", uploadedAt: new Date().toISOString(), recordingPath: `/mock/uploaded-${Date.now()}.mp4`, sizeMB: file ? Math.round(file.size / (1024 * 1024)) : 380 }
       : {
@@ -67,9 +70,40 @@ export function BatchRecordingsManager({
       existing ? prev.map((r) => (r.id === existing.id ? newRec : r)) : [...prev, newRec],
     );
     setOpenRow(null);
-    // Mark "free preview" via mock — store on recording (we just ignore freePreview for now since not in type)
-    void freePreview;
-    // Flip to ready after a moment
+
+    // Try real upload via signed URL from /api/video/upload-url
+    if (file) {
+      try {
+        const res = await fetch("/api/video/upload-url", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            batchId: batch.id,
+            missionId: m.id,
+            contentType: file.type || "video/mp4",
+          }),
+        });
+        if (res.ok) {
+          const { url } = (await res.json()) as { url: string | null };
+          if (url) {
+            // Direct PUT to GCS signed URL
+            const putRes = await fetch(url, {
+              method: "PUT",
+              headers: { "content-type": file.type || "video/mp4" },
+              body: file,
+            });
+            if (!putRes.ok) {
+              console.error("[upload] PUT failed:", putRes.status);
+            }
+          }
+          // If url is null we're in mock mode — just simulate
+        }
+      } catch (err) {
+        console.error("[upload] failed:", err);
+      }
+    }
+
+    // Flip to ready after upload (or simulate in mock mode)
     window.setTimeout(() => {
       setRecordings((prev) =>
         prev.map((r) => (r.id === newRec.id ? { ...r, status: "ready" } : r)),

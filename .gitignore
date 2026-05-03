@@ -1,0 +1,14 @@
+node_modules
+.next
+out
+build
+.env
+.env.local
+.env*.local
+*.log
+.DS_Store
+.vercel
+.firebase
+*-debug.log
+service-account-*.json
+gcp-key*.json

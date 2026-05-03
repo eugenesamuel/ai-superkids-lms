@@ -115,7 +115,7 @@ async function tryGemini(message: string): Promise<string | null> {
         }).getGenerativeModel({
           model: modelName,
           systemInstruction: ZARA_SYSTEM_PROMPT,
-          generationConfig: { maxOutputTokens: 250, temperature: 0.7 },
+          generationConfig: { maxOutputTokens: 500, temperature: 0.7 },
         });
         const r = await model.generateContent({
           contents: [{ role: "user", parts: [{ text: message }] }],

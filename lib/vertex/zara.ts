@@ -49,47 +49,88 @@ async function getGeminiClient() {
   return cachedClient;
 }
 
+async function tryDirectGeminiApi(message: string): Promise<string | null> {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) return null;
+  for (const modelName of GEMINI_MODELS) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${key}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: ZARA_SYSTEM_PROMPT }] },
+            contents: [{ role: "user", parts: [{ text: message }] }],
+            generationConfig: { maxOutputTokens: 500, temperature: 0.7 },
+          }),
+        },
+      );
+      if (!res.ok) {
+        if (res.status === 404 || res.status === 400) continue;
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const data = (await res.json()) as {
+        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      };
+      const text = data.candidates?.[0]?.content?.parts
+        ?.map((p) => p.text ?? "")
+        .join("")
+        .trim();
+      if (text) return text;
+    } catch (err) {
+      console.warn("[zara] direct Gemini API failed:", err instanceof Error ? err.message : err);
+    }
+  }
+  return null;
+}
+
 export async function callZara(
   message: string,
-): Promise<{ reply: string; via: "gemini" } | null> {
-  if (!process.env.GCP_PROJECT_ID) return null;
-  try {
-    const client = await getGeminiClient();
-    for (const modelName of GEMINI_MODELS) {
-      try {
-        const model = (client as {
-          getGenerativeModel: (a: unknown) => {
-            generateContent: (a: unknown) => Promise<{
-              response: {
-                candidates?: Array<{
-                  content?: { parts?: Array<{ text?: string }> };
-                }>;
-              };
-            }>;
-          };
-        }).getGenerativeModel({
-          model: modelName,
-          systemInstruction: ZARA_SYSTEM_PROMPT,
-          generationConfig: { maxOutputTokens: 500, temperature: 0.7 },
-        });
-        const r = await model.generateContent({
-          contents: [{ role: "user", parts: [{ text: message }] }],
-        });
-        const text = r.response.candidates?.[0]?.content?.parts
-          ?.map((p) => p.text ?? "")
-          .join("")
-          .trim();
-        if (text) return { reply: text, via: "gemini" };
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (msg.includes("404") || msg.includes("NOT_FOUND") || msg.includes("not found")) {
-          continue; // try next model name
+): Promise<{ reply: string; via: "gemini-vertex" | "gemini-api" } | null> {
+  // Prefer Vertex AI (uses runtime SA, no key needed). Fall back to direct API key.
+  if (process.env.GCP_PROJECT_ID) {
+    try {
+      const client = await getGeminiClient();
+      for (const modelName of GEMINI_MODELS) {
+        try {
+          const model = (client as {
+            getGenerativeModel: (a: unknown) => {
+              generateContent: (a: unknown) => Promise<{
+                response: {
+                  candidates?: Array<{
+                    content?: { parts?: Array<{ text?: string }> };
+                  }>;
+                };
+              }>;
+            };
+          }).getGenerativeModel({
+            model: modelName,
+            systemInstruction: ZARA_SYSTEM_PROMPT,
+            generationConfig: { maxOutputTokens: 500, temperature: 0.7 },
+          });
+          const r = await model.generateContent({
+            contents: [{ role: "user", parts: [{ text: message }] }],
+          });
+          const text = r.response.candidates?.[0]?.content?.parts
+            ?.map((p) => p.text ?? "")
+            .join("")
+            .trim();
+          if (text) return { reply: text, via: "gemini-vertex" };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (msg.includes("404") || msg.includes("NOT_FOUND") || msg.includes("not found")) {
+            continue;
+          }
+          throw err;
         }
-        throw err;
       }
+    } catch (err) {
+      console.warn("[zara] Vertex AI failed, trying direct API:", err instanceof Error ? err.message : err);
     }
-  } catch (err) {
-    console.warn("[zara] Gemini failed:", err instanceof Error ? err.message : err);
   }
+  // Fallback: direct Gemini API with API key
+  const apiReply = await tryDirectGeminiApi(message);
+  if (apiReply) return { reply: apiReply, via: "gemini-api" };
   return null;
 }

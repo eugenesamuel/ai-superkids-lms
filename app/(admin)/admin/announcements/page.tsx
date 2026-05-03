@@ -1,14 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Send, Megaphone, Mail, Bell } from "lucide-react";
+import { Send, Megaphone, Mail, Bell, TrendingUp, Inbox, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const HISTORY = [
   {
     id: "a1",
     title: "Live class moved to Saturday 4pm",
-    body: "Hey explorers — this week's session got moved by 24 hours...",
+    body: "Hey explorers — this week's session got moved by 24 hours due to a scheduling conflict.",
     audience: "Chennai May 2026",
     sentAt: "2026-05-02T09:30:00.000Z",
     reads: 22,
@@ -17,11 +17,29 @@ const HISTORY = [
   {
     id: "a2",
     title: "New badge unlocked: Streak Star 🔥",
-    body: "Anyone who logs in for 5 days in a row gets a new badge...",
+    body: "Anyone who logs in for 5 days in a row gets a new badge — keep going!",
     audience: "All",
     sentAt: "2026-04-28T11:00:00.000Z",
     reads: 71,
     total: 73,
+  },
+  {
+    id: "a3",
+    title: "Project showcase tomorrow",
+    body: "We'll feature 3 standout projects from this cohort during the live class.",
+    audience: "Mumbai May 2026",
+    sentAt: "2026-04-25T14:00:00.000Z",
+    reads: 17,
+    total: 18,
+  },
+  {
+    id: "a4",
+    title: "Welcome to AI SuperKids!",
+    body: "Hi parents — your child's enrollment is confirmed. First mission unlocks Monday.",
+    audience: "Online June 2026",
+    sentAt: "2026-04-20T08:00:00.000Z",
+    reads: 28,
+    total: 31,
   },
 ];
 
@@ -45,7 +63,7 @@ export default function AnnouncementsPage() {
         </p>
       </div>
 
-      <div className="grid lg:grid-cols-[1.1fr_1fr] gap-6">
+      <div className="grid lg:grid-cols-[1.1fr_1fr] gap-6 items-start">
         {/* Compose */}
         <form
           onSubmit={(e) => {
@@ -55,7 +73,7 @@ export default function AnnouncementsPage() {
             setBody("");
             setTimeout(() => setSent(false), 3000);
           }}
-          className="kid-card p-6 space-y-4 h-fit"
+          className="kid-card p-6 space-y-4"
         >
           <div className="flex items-center gap-2">
             <span className="grid place-items-center w-9 h-9 rounded-xl bg-ds-orange/15 text-ds-orange">
@@ -144,42 +162,72 @@ export default function AnnouncementsPage() {
           </button>
         </form>
 
-        {/* Sent history */}
-        <div className="kid-card p-6 h-fit">
-          <h3 className="font-display font-bold text-base text-space-navy mb-3">
-            Recent sends
-          </h3>
-          <ul className="space-y-3">
-            {HISTORY.map((h) => {
-              const readPct = Math.round((h.reads / h.total) * 100);
-              return (
-                <li key={h.id} className="border border-neutral-200 rounded-xl p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <p className="font-display font-bold text-sm text-space-navy">
-                      {h.title}
-                    </p>
-                    <span className="text-[10px] font-display font-semibold uppercase tracking-wider text-space-navy/55 px-2 py-0.5 rounded-full bg-neutral-100">
-                      {h.audience}
-                    </span>
-                  </div>
-                  <p className="text-xs text-space-navy/60 mt-1 line-clamp-2">{h.body}</p>
-                  <div className="flex items-center justify-between mt-3">
-                    <p className="text-[10px] text-space-navy/45">
-                      {new Date(h.sentAt).toLocaleString()}
-                    </p>
-                    <p className="text-xs font-display font-semibold text-space-navy/65">
-                      <span className="text-neon-green">{readPct}%</span> read
-                      <span className="text-space-navy/40 ml-1">
-                        ({h.reads}/{h.total})
+        {/* Right column — stats + history */}
+        <div className="space-y-4">
+          {/* Stats trio */}
+          <div className="grid grid-cols-3 gap-3">
+            <RailStat icon={<Inbox className="w-3.5 h-3.5" />} label="Sent (30d)" value={`${HISTORY.length}`} accent="#FF6B35" />
+            <RailStat icon={<Eye className="w-3.5 h-3.5" />} label="Avg read" value={`${Math.round(HISTORY.reduce((s, h) => s + (h.reads / h.total) * 100, 0) / HISTORY.length)}%`} accent="#00C853" />
+            <RailStat icon={<TrendingUp className="w-3.5 h-3.5" />} label="Reach" value={`${HISTORY.reduce((s, h) => s + h.total, 0)}`} accent="#00D4FF" />
+          </div>
+
+          {/* Sent history */}
+          <div className="kid-card p-6">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-display font-bold text-base text-space-navy">
+                Recent sends
+              </h3>
+              <span className="text-xs text-space-navy/50 font-display">
+                Last 30 days
+              </span>
+            </div>
+            <ul className="space-y-3">
+              {HISTORY.map((h) => {
+                const readPct = Math.round((h.reads / h.total) * 100);
+                return (
+                  <li key={h.id} className="border border-neutral-200 rounded-xl p-4 hover:bg-neutral-50/40 transition-colors">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="font-display font-bold text-sm text-space-navy">
+                        {h.title}
+                      </p>
+                      <span className="text-[10px] font-display font-semibold uppercase tracking-wider text-space-navy/55 px-2 py-0.5 rounded-full bg-neutral-100 shrink-0">
+                        {h.audience}
                       </span>
-                    </p>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+                    </div>
+                    <p className="text-xs text-space-navy/60 mt-1 line-clamp-2">{h.body}</p>
+                    <div className="flex items-center justify-between mt-3 gap-3">
+                      <p className="text-[10px] text-space-navy/45">
+                        {new Date(h.sentAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                      <div className="flex-1 max-w-[120px] h-1 rounded-full bg-neutral-200 overflow-hidden">
+                        <div className="h-full rounded-full bg-neon-green" style={{ width: `${readPct}%` }} />
+                      </div>
+                      <p className="text-xs font-display font-semibold text-space-navy/70 tabular-nums shrink-0">
+                        <span className="text-neon-green">{readPct}%</span>
+                        <span className="text-space-navy/40 ml-1 text-[10px]">
+                          {h.reads}/{h.total}
+                        </span>
+                      </p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function RailStat({ icon, label, value, accent }: { icon: React.ReactNode; label: string; value: string; accent: string }) {
+  return (
+    <div className="kid-card p-3">
+      <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider font-display font-semibold" style={{ color: accent }}>
+        {icon}
+        <span className="truncate">{label}</span>
+      </div>
+      <p className="font-display font-bold text-xl text-space-navy mt-1 tabular-nums">{value}</p>
     </div>
   );
 }

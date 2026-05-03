@@ -1,4 +1,5 @@
-// Zara on Vertex AI — Claude (preferred) with Gemini fallback. Spec §8.
+// Zara on Vertex AI — Gemini.
+// Uses ADC from the runtime SA on Cloud Run. No API key required.
 
 export const ZARA_SYSTEM_PROMPT = `You are Zara, the friendly AI learning assistant for AI SuperKids by Digital Scholar.
 You help kids aged 9-17 understand AI in simple, fun, encouraging language.
@@ -30,79 +31,33 @@ export function filterReply(reply: string): string {
   return trimmed;
 }
 
-const CLAUDE_MODELS = [
-  "claude-haiku-4-5@20251001",
-  "claude-3-5-haiku@20241022",
-];
-
 const GEMINI_MODELS = [
   "gemini-2.5-flash",
   "gemini-2.0-flash",
   "gemini-1.5-flash-002",
 ];
 
-let cachedClaude: unknown = null;
-let cachedGemini: unknown = null;
+let cachedClient: unknown = null;
 
-async function tryClaude(message: string): Promise<string | null> {
-  try {
-    if (!cachedClaude) {
-      const { AnthropicVertex } = await import("@anthropic-ai/vertex-sdk");
-      cachedClaude = new AnthropicVertex({
-        projectId: process.env.GCP_PROJECT_ID!,
-        region: process.env.VERTEX_AI_LOCATION ?? "us-east5",
-      });
-    }
-    for (const model of CLAUDE_MODELS) {
-      try {
-        const r = await (cachedClaude as {
-          messages: {
-            create: (a: unknown) => Promise<{ content: Array<{ type: string; text?: string }> }>;
-          };
-        }).messages.create({
-          model,
-          system: ZARA_SYSTEM_PROMPT,
-          max_tokens: 200,
-          messages: [{ role: "user", content: message }],
-        });
-        const text = r.content
-          .filter((b) => b.type === "text")
-          .map((b) => b.text ?? "")
-          .join("")
-          .trim();
-        if (text) return text;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (
-          msg.includes("404") ||
-          msg.includes("NOT_FOUND") ||
-          msg.includes("not found") ||
-          msg.includes("PERMISSION") ||
-          msg.includes("not authorized")
-        ) {
-          continue; // try next model / fall through to Gemini
-        }
-        throw err;
-      }
-    }
-  } catch (err) {
-    console.warn("[zara] Claude unavailable:", err instanceof Error ? err.message : err);
-  }
-  return null;
+async function getGeminiClient() {
+  if (cachedClient) return cachedClient;
+  const mod = await import("@google-cloud/vertexai");
+  cachedClient = new mod.VertexAI({
+    project: process.env.GCP_PROJECT_ID!,
+    location: process.env.VERTEX_AI_LOCATION ?? "us-central1",
+  });
+  return cachedClient;
 }
 
-async function tryGemini(message: string): Promise<string | null> {
+export async function callZara(
+  message: string,
+): Promise<{ reply: string; via: "gemini" } | null> {
+  if (!process.env.GCP_PROJECT_ID) return null;
   try {
-    if (!cachedGemini) {
-      const mod = await import("@google-cloud/vertexai");
-      cachedGemini = new mod.VertexAI({
-        project: process.env.GCP_PROJECT_ID!,
-        location: process.env.VERTEX_AI_LOCATION ?? "us-central1",
-      });
-    }
+    const client = await getGeminiClient();
     for (const modelName of GEMINI_MODELS) {
       try {
-        const model = (cachedGemini as {
+        const model = (client as {
           getGenerativeModel: (a: unknown) => {
             generateContent: (a: unknown) => Promise<{
               response: {
@@ -124,11 +79,11 @@ async function tryGemini(message: string): Promise<string | null> {
           ?.map((p) => p.text ?? "")
           .join("")
           .trim();
-        if (text) return text;
+        if (text) return { reply: text, via: "gemini" };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         if (msg.includes("404") || msg.includes("NOT_FOUND") || msg.includes("not found")) {
-          continue;
+          continue; // try next model name
         }
         throw err;
       }
@@ -136,14 +91,5 @@ async function tryGemini(message: string): Promise<string | null> {
   } catch (err) {
     console.warn("[zara] Gemini failed:", err instanceof Error ? err.message : err);
   }
-  return null;
-}
-
-export async function callZara(message: string): Promise<{ reply: string; via: "claude" | "gemini" } | null> {
-  if (!process.env.GCP_PROJECT_ID) return null;
-  const claudeReply = await tryClaude(message);
-  if (claudeReply) return { reply: claudeReply, via: "claude" };
-  const geminiReply = await tryGemini(message);
-  if (geminiReply) return { reply: geminiReply, via: "gemini" };
   return null;
 }

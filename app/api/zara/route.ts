@@ -19,12 +19,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Message required (under 500 chars)" }, { status: 400 });
   }
 
-  // Vertex AI Claude is independent from the mock-data flag — if GCP_PROJECT_ID is set
-  // and the runtime SA can call Vertex AI, we use real Claude. Otherwise mock.
+  // Vertex AI: tries Claude first (when subscribed on Marketplace), then Gemini
+  // (always available in any GCP project), then falls back to mock canned replies.
   if (process.env.GCP_PROJECT_ID) {
     const real = await callZara(message);
     if (real) {
-      return NextResponse.json({ reply: filterReply(real), via: "vertex" });
+      return NextResponse.json({ reply: filterReply(real.reply), via: real.via });
     }
   }
 

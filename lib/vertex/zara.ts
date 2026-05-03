@@ -1,4 +1,4 @@
-// Zara on Vertex AI — Claude system prompt + content filter from spec §8.
+// Zara on Vertex AI — Claude (preferred) with Gemini fallback. Spec §8.
 
 export const ZARA_SYSTEM_PROMPT = `You are Zara, the friendly AI learning assistant for AI SuperKids by Digital Scholar.
 You help kids aged 9-17 understand AI in simple, fun, encouraging language.
@@ -30,40 +30,34 @@ export function filterReply(reply: string): string {
   return trimmed;
 }
 
-export type ZaraResult = { reply: string; via: "vertex" | "mock" };
-
-const VERTEX_MODELS_TO_TRY = [
+const CLAUDE_MODELS = [
   "claude-haiku-4-5@20251001",
   "claude-3-5-haiku@20241022",
-  "claude-3-5-haiku-v2@20241022",
 ];
 
-let cachedClient: unknown = null;
+const GEMINI_MODELS = [
+  "gemini-2.5-flash",
+  "gemini-2.0-flash",
+  "gemini-1.5-flash-002",
+];
 
-async function getVertexClient() {
-  if (cachedClient) return cachedClient;
-  const { AnthropicVertex } = await import("@anthropic-ai/vertex-sdk");
-  const project = process.env.GCP_PROJECT_ID;
-  const region = process.env.VERTEX_AI_LOCATION ?? "us-east5";
-  if (!project) throw new Error("GCP_PROJECT_ID not set");
-  cachedClient = new AnthropicVertex({ projectId: project, region });
-  return cachedClient;
-}
+let cachedClaude: unknown = null;
+let cachedGemini: unknown = null;
 
-/**
- * Calls Claude on Vertex AI. Returns null on failure (caller uses mock fallback).
- */
-export async function callZara(message: string): Promise<string | null> {
-  if (!process.env.GCP_PROJECT_ID) return null;
+async function tryClaude(message: string): Promise<string | null> {
   try {
-    const client = await getVertexClient();
-    for (const model of VERTEX_MODELS_TO_TRY) {
+    if (!cachedClaude) {
+      const { AnthropicVertex } = await import("@anthropic-ai/vertex-sdk");
+      cachedClaude = new AnthropicVertex({
+        projectId: process.env.GCP_PROJECT_ID!,
+        region: process.env.VERTEX_AI_LOCATION ?? "us-east5",
+      });
+    }
+    for (const model of CLAUDE_MODELS) {
       try {
-        const response = await (client as {
+        const r = await (cachedClaude as {
           messages: {
-            create: (args: unknown) => Promise<{
-              content: Array<{ type: string; text?: string }>;
-            }>;
+            create: (a: unknown) => Promise<{ content: Array<{ type: string; text?: string }> }>;
           };
         }).messages.create({
           model,
@@ -71,24 +65,85 @@ export async function callZara(message: string): Promise<string | null> {
           max_tokens: 200,
           messages: [{ role: "user", content: message }],
         });
-        const text = response.content
+        const text = r.content
           .filter((b) => b.type === "text")
           .map((b) => b.text ?? "")
           .join("")
           .trim();
         if (text) return text;
       } catch (err) {
-        // Try next model name. Most likely error: model not enabled / region mismatch.
         const msg = err instanceof Error ? err.message : String(err);
-        if (msg.includes("404") || msg.includes("not found") || msg.includes("NOT_FOUND")) {
+        if (
+          msg.includes("404") ||
+          msg.includes("NOT_FOUND") ||
+          msg.includes("not found") ||
+          msg.includes("PERMISSION") ||
+          msg.includes("not authorized")
+        ) {
+          continue; // try next model / fall through to Gemini
+        }
+        throw err;
+      }
+    }
+  } catch (err) {
+    console.warn("[zara] Claude unavailable:", err instanceof Error ? err.message : err);
+  }
+  return null;
+}
+
+async function tryGemini(message: string): Promise<string | null> {
+  try {
+    if (!cachedGemini) {
+      const mod = await import("@google-cloud/vertexai");
+      cachedGemini = new mod.VertexAI({
+        project: process.env.GCP_PROJECT_ID!,
+        location: process.env.VERTEX_AI_LOCATION ?? "us-central1",
+      });
+    }
+    for (const modelName of GEMINI_MODELS) {
+      try {
+        const model = (cachedGemini as {
+          getGenerativeModel: (a: unknown) => {
+            generateContent: (a: unknown) => Promise<{
+              response: {
+                candidates?: Array<{
+                  content?: { parts?: Array<{ text?: string }> };
+                }>;
+              };
+            }>;
+          };
+        }).getGenerativeModel({
+          model: modelName,
+          systemInstruction: ZARA_SYSTEM_PROMPT,
+          generationConfig: { maxOutputTokens: 250, temperature: 0.7 },
+        });
+        const r = await model.generateContent({
+          contents: [{ role: "user", parts: [{ text: message }] }],
+        });
+        const text = r.response.candidates?.[0]?.content?.parts
+          ?.map((p) => p.text ?? "")
+          .join("")
+          .trim();
+        if (text) return text;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("404") || msg.includes("NOT_FOUND") || msg.includes("not found")) {
           continue;
         }
         throw err;
       }
     }
-    return null;
   } catch (err) {
-    console.error("[zara] vertex call failed:", err);
-    return null;
+    console.warn("[zara] Gemini failed:", err instanceof Error ? err.message : err);
   }
+  return null;
+}
+
+export async function callZara(message: string): Promise<{ reply: string; via: "claude" | "gemini" } | null> {
+  if (!process.env.GCP_PROJECT_ID) return null;
+  const claudeReply = await tryClaude(message);
+  if (claudeReply) return { reply: claudeReply, via: "claude" };
+  const geminiReply = await tryGemini(message);
+  if (geminiReply) return { reply: geminiReply, via: "gemini" };
+  return null;
 }

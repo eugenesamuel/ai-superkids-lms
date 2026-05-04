@@ -24,7 +24,6 @@ export default function LessonPage({ params }: { params: { lessonId: string } })
 
   // Fetch a real signed playback URL from the API. Falls back to mock path if API returns null.
   const [signedSrc, setSignedSrc] = useState<string | null>(null);
-  const [signedTried, setSignedTried] = useState(false);
   useEffect(() => {
     let cancelled = false;
     fetch(`/api/video/playback-url?lessonId=${encodeURIComponent(params.lessonId)}`)
@@ -32,9 +31,11 @@ export default function LessonPage({ params }: { params: { lessonId: string } })
       .then((data) => {
         if (cancelled) return;
         if (data?.url) setSignedSrc(data.url);
-        setSignedTried(true);
       })
-      .catch(() => setSignedTried(true));
+      .catch((err) => {
+        // Server-side issues are logged on Cloud Run; kids see only a friendly message.
+        console.error("[lesson] signed URL fetch failed:", err);
+      });
     return () => {
       cancelled = true;
     };
@@ -117,11 +118,6 @@ export default function LessonPage({ params }: { params: { lessonId: string } })
             {!recording && batch && (
               <p className="text-sm text-space-navy/60 font-body">
                 The recording for {batch.name} hasn't been uploaded yet. Eugene usually posts it within a day of the live session.
-              </p>
-            )}
-            {signedTried && signedSrc && (
-              <p className="text-[10px] text-space-navy/40 font-body">
-                ✓ Streaming via Cloud Storage signed URL · expires in 4 hours
               </p>
             )}
             {completed && (

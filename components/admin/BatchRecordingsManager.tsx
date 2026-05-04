@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Play,
   Upload,
@@ -256,39 +256,14 @@ export function BatchRecordingsManager({
         Add more missions in Course Content
       </button>
 
-      {/* Preview modal */}
+      {/* Preview modal — real video player via signed URL */}
       {previewing && (
-        <div className="fixed inset-0 z-40 grid place-items-center bg-black/70 p-4">
-          <div className="bg-white rounded-2xl max-w-3xl w-full overflow-hidden">
-            <div className="px-5 py-4 border-b border-neutral-100 flex items-center justify-between">
-              <div>
-                <p className="font-display font-bold text-base text-space-navy">
-                  {previewing.title}
-                </p>
-                <p className="text-xs text-space-navy/55 mt-0.5">
-                  {batch.name} · {previewing.durationMins} min · {previewing.sizeMB} MB
-                </p>
-              </div>
-              <button
-                onClick={() => setPreviewing(null)}
-                className="px-3 py-1.5 rounded-lg bg-neutral-100 hover:bg-neutral-200 font-display font-semibold text-xs"
-              >
-                Close
-              </button>
-            </div>
-            <div className="aspect-video bg-space-deep grid place-items-center text-white/70">
-              <div className="text-center">
-                <Play className="w-12 h-12 mx-auto" />
-                <p className="text-sm mt-2 font-display">Preview placeholder</p>
-                <p className="text-xs text-white/40 mt-0.5">
-                  In production this loads the signed Media CDN URL.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
+        <PreviewModal
+          recording={previewing}
+          batchName={batch.name}
+          onClose={() => setPreviewing(null)}
+        />
       )}
-
       {/* Delete confirm */}
       {confirmDelete && (
         <div className="fixed inset-0 z-40 grid place-items-center bg-black/50 p-4">
@@ -322,6 +297,98 @@ export function BatchRecordingsManager({
 }
 
 /* ─── Sub-components ─────────────────────────────────────────────────── */
+
+function PreviewModal({
+  recording,
+  batchName,
+  onClose,
+}: {
+  recording: BatchRecording;
+  batchName: string;
+  onClose: () => void;
+}) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch the signed URL on mount. Falls back to recording.recordingPath when not a /mock/ path.
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetch(`/api/video/playback-url?lessonId=${encodeURIComponent(recording.missionId)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        if (data?.url) {
+          setSrc(data.url);
+        } else if (
+          recording.recordingPath &&
+          !recording.recordingPath.startsWith("/mock/")
+        ) {
+          setSrc(recording.recordingPath);
+        } else {
+          setErr(
+            "This recording is seeded mock data — no real file in Cloud Storage yet. Upload a real video using the row above and the preview will play it.",
+          );
+        }
+        setLoading(false);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        console.error("[preview] signed URL fetch failed:", e);
+        setErr("Couldn't load the signed URL.");
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [recording.missionId, recording.recordingPath]);
+
+  return (
+    <div className="fixed inset-0 z-40 grid place-items-center bg-black/70 p-4">
+      <div className="bg-white rounded-2xl max-w-3xl w-full overflow-hidden">
+        <div className="px-5 py-4 border-b border-neutral-100 flex items-center justify-between">
+          <div>
+            <p className="font-display font-bold text-base text-space-navy">
+              {recording.title}
+            </p>
+            <p className="text-xs text-space-navy/55 mt-0.5">
+              {batchName} · {recording.durationMins} min · {recording.sizeMB} MB
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="px-3 py-1.5 rounded-lg bg-neutral-100 hover:bg-neutral-200 font-display font-semibold text-xs"
+          >
+            Close
+          </button>
+        </div>
+        <div className="aspect-video bg-space-deep grid place-items-center text-white/70 relative">
+          {loading && (
+            <p className="text-xs text-white/55 font-display">Loading signed URL...</p>
+          )}
+          {!loading && src && (
+            <video
+              src={src}
+              controls
+              autoPlay
+              controlsList="nodownload noremoteplayback"
+              className="absolute inset-0 w-full h-full"
+              onContextMenu={(e) => e.preventDefault()}
+            />
+          )}
+          {!loading && !src && err && (
+            <div className="text-center px-6">
+              <Play className="w-12 h-12 mx-auto opacity-50" />
+              <p className="text-sm mt-2 font-display">Can't preview this one</p>
+              <p className="text-xs text-white/55 mt-1.5 max-w-md">{err}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function StatusPill({ recording }: { recording?: BatchRecording }) {
   if (!recording) {

@@ -33,6 +33,21 @@ export function BatchRecordingsManager({
   initialRecordings: BatchRecording[];
 }) {
   const [recordings, setRecordings] = useState<BatchRecording[]>(initialRecordings);
+
+  // Reload from API on mount + after upload so persisted state shows up.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/admin/recordings?batchId=${encodeURIComponent(batch.id)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        if (data?.recordings) setRecordings(data.recordings);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [batch.id]);
   const [openRow, setOpenRow] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<BatchRecording | null>(null);
   const [previewing, setPreviewing] = useState<BatchRecording | null>(null);
@@ -72,6 +87,7 @@ export function BatchRecordingsManager({
     setOpenRow(null);
 
     // Try real upload via signed URL from /api/video/upload-url
+    let uploadOk = false;
     if (file) {
       try {
         const res = await fetch("/api/video/upload-url", {
@@ -86,24 +102,39 @@ export function BatchRecordingsManager({
         if (res.ok) {
           const { url } = (await res.json()) as { url: string | null };
           if (url) {
-            // Direct PUT to GCS signed URL
             const putRes = await fetch(url, {
               method: "PUT",
               headers: { "content-type": file.type || "video/mp4" },
               body: file,
             });
-            if (!putRes.ok) {
-              console.error("[upload] PUT failed:", putRes.status);
-            }
+            uploadOk = putRes.ok;
+            if (!uploadOk) console.error("[upload] PUT failed:", putRes.status);
           }
-          // If url is null we're in mock mode — just simulate
         }
       } catch (err) {
         console.error("[upload] failed:", err);
       }
     }
 
-    // Flip to ready after upload (or simulate in mock mode)
+    // Persist recording metadata to Firestore so it survives reloads
+    if (uploadOk) {
+      try {
+        await fetch("/api/admin/recordings", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            batchId: batch.id,
+            missionId: m.id,
+            sizeMB: file ? Math.round(file.size / (1024 * 1024)) : 380,
+            durationMins: m.durationMins,
+          }),
+        });
+      } catch (err) {
+        console.error("[upload] persist metadata failed:", err);
+      }
+    }
+
+    // Flip to ready
     window.setTimeout(() => {
       setRecordings((prev) =>
         prev.map((r) => (r.id === newRec.id ? { ...r, status: "ready" } : r)),

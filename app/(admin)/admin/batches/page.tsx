@@ -1,13 +1,55 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, Users, Calendar, MapPin } from "lucide-react";
+import type { Batch } from "@/lib/types";
 import { mockBatches } from "@/lib/mock-data";
 
 export default function BatchesPage() {
+  const [batches, setBatches] = useState<Batch[]>(mockBatches);
+  const [loading, setLoading] = useState(true);
   const [showNew, setShowNew] = useState(false);
   const [created, setCreated] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function loadBatches() {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/admin/batches");
+      const data = (await res.json()) as { batches: Batch[] };
+      setBatches(data.batches);
+    } catch (err) {
+      console.error("[batches] load failed", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadBatches();
+  }, []);
+
+  async function handleCreate(input: { name: string; city: string; startDate: string }) {
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/batches", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string; batch?: Batch };
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error ?? "Create failed");
+      }
+      setCreated(input.name);
+      window.setTimeout(() => setCreated(null), 4000);
+      setShowNew(false);
+      await loadBatches();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create batch");
+    }
+  }
 
   return (
     <div className="px-6 py-6 space-y-6">
@@ -41,102 +83,128 @@ export default function BatchesPage() {
       )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Stat label="Active batches" value={`${mockBatches.filter((b) => b.status === "active").length}`} accent="#FF6B35" />
-        <Stat label="Total kids" value={`${mockBatches.reduce((s, b) => s + b.parentUids.length, 0)}`} accent="#A855F7" />
-        <Stat label="Cities" value={`${new Set(mockBatches.map((b) => b.city)).size}`} accent="#00D4FF" />
+        <Stat label="Active batches" value={`${batches.filter((b) => b.status === "active").length}`} accent="#FF6B35" />
+        <Stat label="Total kids" value={`${batches.reduce((s, b) => s + b.parentUids.length, 0)}`} accent="#A855F7" />
+        <Stat label="Cities" value={`${new Set(batches.map((b) => b.city)).size}`} accent="#00D4FF" />
         <Stat
           label="Avg cohort"
-          value={`${Math.round(mockBatches.reduce((s, b) => s + b.parentUids.length, 0) / mockBatches.length)}`}
+          value={`${batches.length === 0 ? 0 : Math.round(batches.reduce((s, b) => s + b.parentUids.length, 0) / batches.length)}`}
           accent="#00C853"
         />
       </div>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {mockBatches.map((b) => (
-          <div key={b.id} className="kid-card p-5 space-y-3 flex flex-col">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="font-display font-bold text-lg text-space-navy">
-                  {b.name}
-                </p>
-                <p className="text-xs text-space-navy/55 flex items-center gap-1 mt-0.5">
-                  <MapPin className="w-3 h-3" />
-                  {b.city}
-                  <span className="mx-1">·</span>
-                  <Calendar className="w-3 h-3" />
-                  Starts {new Date(b.startDate).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                </p>
-              </div>
-              <span
-                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-display font-semibold uppercase tracking-wider ${
-                  b.status === "active"
-                    ? "bg-neon-green/15 text-neon-green"
-                    : b.status === "scheduled"
-                      ? "bg-electric-cyan/15 text-electric-cyan"
-                      : "bg-neutral-100 text-space-navy/55"
-                }`}
-              >
-                {b.status}
-              </span>
-            </div>
-            <div className="flex items-baseline gap-2">
-              <span className="font-display font-bold text-3xl text-space-navy tabular-nums">
-                {b.parentUids.length}
-              </span>
-              <span className="text-xs text-space-navy/55 font-display flex items-center gap-1">
-                <Users className="w-3 h-3" />
-                explorers
-              </span>
-            </div>
-            <div>
-              <div className="flex items-baseline justify-between mb-1">
-                <span className="text-[10px] uppercase tracking-wide text-space-navy/55 font-display font-semibold">
-                  Cohort progress
-                </span>
-                <span className="text-xs font-display font-semibold text-space-navy tabular-nums">
-                  {b.progressPercent}%
-                </span>
-              </div>
-              <div className="h-1.5 rounded-full bg-neutral-200 overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-ds-orange"
-                  style={{ width: `${b.progressPercent}%` }}
-                />
-              </div>
-            </div>
-            <div className="flex items-center gap-2 pt-1 mt-auto">
-              <Link
-                href={`/admin/batches/${b.id}`}
-                className="flex-1 px-3 py-2 rounded-lg bg-white border border-neutral-200 hover:bg-neutral-50 text-space-navy text-center font-display font-semibold text-xs tap-scale"
-              >
-                Manage
-              </Link>
-              <Link
-                href={`/admin/batches/${b.id}`}
-                className="flex-1 px-3 py-2 rounded-lg bg-ds-orange/10 text-ds-orange text-center font-display font-semibold text-xs tap-scale hover:bg-ds-orange/20"
-              >
-                Roster →
-              </Link>
-            </div>
+        {loading && batches.length === 0 ? (
+          <div className="col-span-full kid-card p-10 text-center text-space-navy/55 text-sm">
+            Loading batches...
           </div>
-        ))}
+        ) : batches.length === 0 ? (
+          <div className="col-span-full kid-card p-10 text-center">
+            <p className="font-display font-semibold text-space-navy">No batches yet</p>
+            <p className="text-sm text-space-navy/55 mt-1">
+              Create your first cohort to start onboarding kids.
+            </p>
+          </div>
+        ) : (
+          batches.map((b) => (
+            <div key={b.id} className="kid-card p-5 space-y-3 flex flex-col">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="font-display font-bold text-lg text-space-navy">
+                    {b.name}
+                  </p>
+                  <p className="text-xs text-space-navy/55 flex items-center gap-1 mt-0.5">
+                    <MapPin className="w-3 h-3" />
+                    {b.city}
+                    <span className="mx-1">·</span>
+                    <Calendar className="w-3 h-3" />
+                    Starts {new Date(b.startDate).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                  </p>
+                </div>
+                <span
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-display font-semibold uppercase tracking-wider ${
+                    b.status === "active"
+                      ? "bg-neon-green/15 text-neon-green"
+                      : b.status === "scheduled"
+                        ? "bg-electric-cyan/15 text-electric-cyan"
+                        : "bg-neutral-100 text-space-navy/55"
+                  }`}
+                >
+                  {b.status}
+                </span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="font-display font-bold text-3xl text-space-navy tabular-nums">
+                  {b.parentUids.length}
+                </span>
+                <span className="text-xs text-space-navy/55 font-display flex items-center gap-1">
+                  <Users className="w-3 h-3" />
+                  explorers
+                </span>
+              </div>
+              <div>
+                <div className="flex items-baseline justify-between mb-1">
+                  <span className="text-[10px] uppercase tracking-wide text-space-navy/55 font-display font-semibold">
+                    Cohort progress
+                  </span>
+                  <span className="text-xs font-display font-semibold text-space-navy tabular-nums">
+                    {b.progressPercent}%
+                  </span>
+                </div>
+                <div className="h-1.5 rounded-full bg-neutral-200 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-ds-orange"
+                    style={{ width: `${b.progressPercent}%` }}
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-2 pt-1 mt-auto">
+                <Link
+                  href={`/admin/batches/${b.id}`}
+                  className="flex-1 px-3 py-2 rounded-lg bg-white border border-neutral-200 hover:bg-neutral-50 text-space-navy text-center font-display font-semibold text-xs tap-scale"
+                >
+                  Manage
+                </Link>
+                <Link
+                  href={`/admin/batches/${b.id}`}
+                  className="flex-1 px-3 py-2 rounded-lg bg-ds-orange/10 text-ds-orange text-center font-display font-semibold text-xs tap-scale hover:bg-ds-orange/20"
+                >
+                  Roster →
+                </Link>
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
-      {showNew && <NewBatchModal onCancel={() => setShowNew(false)} onCreated={(name) => { setShowNew(false); setCreated(name); window.setTimeout(() => setCreated(null), 4000); }} />}
+      {showNew && (
+        <NewBatchModal
+          onCancel={() => {
+            setShowNew(false);
+            setError(null);
+          }}
+          onCreate={handleCreate}
+          error={error}
+        />
+      )}
     </div>
   );
 }
 
 function NewBatchModal({
   onCancel,
-  onCreated,
+  onCreate,
+  error,
 }: {
   onCancel: () => void;
-  onCreated: (name: string) => void;
+  onCreate: (input: { name: string; city: string; startDate: string }) => Promise<void>;
+  error: string | null;
 }) {
   const [name, setName] = useState("");
   const [city, setCity] = useState("Chennai");
   const [date, setDate] = useState("");
+  const [busy, setBusy] = useState(false);
+
   return (
     <div className="fixed inset-0 z-40 grid place-items-center bg-black/50 p-4">
       <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4">
@@ -146,10 +214,20 @@ function NewBatchModal({
         <p className="text-sm text-space-navy/60">
           Cohorts are how students are grouped. Recordings and announcements are sent per-batch.
         </p>
+        {error && (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
         <form
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
-            onCreated(name);
+            setBusy(true);
+            try {
+              await onCreate({ name, city, startDate: date });
+            } finally {
+              setBusy(false);
+            }
           }}
           className="space-y-3"
         >
@@ -191,15 +269,17 @@ function NewBatchModal({
             <button
               type="button"
               onClick={onCancel}
-              className="flex-1 px-4 py-3 rounded-xl bg-white border border-neutral-200 font-display font-semibold text-sm hover:bg-neutral-50"
+              disabled={busy}
+              className="flex-1 px-4 py-3 rounded-xl bg-white border border-neutral-200 font-display font-semibold text-sm hover:bg-neutral-50 disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 px-4 py-3 rounded-xl bg-ds-orange text-white font-display font-semibold text-sm hover:brightness-110 shadow-sm"
+              disabled={busy}
+              className="flex-1 px-4 py-3 rounded-xl bg-ds-orange text-white font-display font-semibold text-sm hover:brightness-110 shadow-sm disabled:opacity-50"
             >
-              Create batch
+              {busy ? "Creating..." : "Create batch"}
             </button>
           </div>
         </form>

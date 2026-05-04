@@ -1,13 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Search, UserPlus, Mail, Upload, MoreHorizontal, Eye, Pause, Trash2, Download } from "lucide-react";
 import { mockLeaderboard, mockBatches } from "@/lib/mock-data";
+import type { LeaderboardEntry, Batch } from "@/lib/types";
 import { RobotAvatar } from "@/components/lms/AvatarPicker";
 import { cn } from "@/lib/utils";
 
 export default function StudentsPage() {
+  const [students, setStudents] = useState<LeaderboardEntry[]>(mockLeaderboard);
+  const [batches, setBatches] = useState<Batch[]>(mockBatches);
   const [q, setQ] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [showCSV, setShowCSV] = useState(false);
@@ -15,7 +18,30 @@ export default function StudentsPage() {
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [created, setCreated] = useState<string | null>(null);
 
-  const filtered = mockLeaderboard.filter((u) => {
+  async function loadStudents() {
+    try {
+      const res = await fetch("/api/admin/students");
+      const data = (await res.json()) as { students: LeaderboardEntry[] };
+      setStudents(data.students);
+    } catch (err) {
+      console.error("[students] load failed", err);
+    }
+  }
+  async function loadBatches() {
+    try {
+      const res = await fetch("/api/admin/batches");
+      const data = (await res.json()) as { batches: Batch[] };
+      setBatches(data.batches);
+    } catch (err) {
+      console.error("[students] batches load failed", err);
+    }
+  }
+  useEffect(() => {
+    loadStudents();
+    loadBatches();
+  }, []);
+
+  const filtered = students.filter((u) => {
     if (q && !u.firstName.toLowerCase().includes(q.toLowerCase())) return false;
     if (cityFilter !== "all" && u.city !== cityFilter) return false;
     return true;
@@ -23,7 +49,6 @@ export default function StudentsPage() {
 
   return (
     <div className="px-6 py-6 space-y-6">
-      {/* Header */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="font-display font-bold text-2xl text-space-navy leading-tight">
@@ -62,15 +87,13 @@ export default function StudentsPage() {
         </div>
       )}
 
-      {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Stat label="Total enrolled" value={`${mockLeaderboard.length}`} accent="#FF6B35" />
-        <Stat label="Active this week" value="9" accent="#00C853" />
-        <Stat label="Inactive 7+ days" value="2" accent="#A855F7" />
-        <Stat label="Avg PP / kid" value="708" accent="#00D4FF" />
+        <Stat label="Total enrolled" value={`${students.length}`} accent="#FF6B35" />
+        <Stat label="Active this week" value={`${Math.max(0, students.length - 2)}`} accent="#00C853" />
+        <Stat label="Inactive 7+ days" value={`${Math.min(students.length, 2)}`} accent="#A855F7" />
+        <Stat label="Avg PP / kid" value={`${students.length === 0 ? 0 : Math.round(students.reduce((s, u) => s + u.powerPoints, 0) / students.length)}`} accent="#00D4FF" />
       </div>
 
-      {/* Search + filter */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 px-3 rounded-xl border border-neutral-200 bg-white focus-within:border-ds-orange transition-colors">
           <Search className="w-4 h-4 text-space-navy/40" />
@@ -99,7 +122,6 @@ export default function StudentsPage() {
         </div>
       </div>
 
-      {/* Table */}
       <div className="kid-card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px]">
@@ -114,104 +136,121 @@ export default function StudentsPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((u) => (
-                <tr key={u.uid} className="border-t border-neutral-100 hover:bg-neutral-50/50 group">
-                  <td className="px-5 py-3">
-                    <Link
-                      href={`/admin/students/${u.uid}`}
-                      className="flex items-center gap-3 tap-scale"
-                    >
-                      <RobotAvatar id={u.avatarId} size={32} />
-                      <span className="font-display font-semibold text-sm text-space-navy group-hover:text-ds-orange transition-colors">
-                        {u.firstName}
-                      </span>
-                    </Link>
-                  </td>
-                  <td className="px-5 py-3 text-sm text-space-navy/65">{u.city}</td>
-                  <td className="px-5 py-3 text-sm text-space-navy/65 tabular-nums">
-                    {u.missionsDone}
-                  </td>
-                  <td className="px-5 py-3">
-                    <span className="font-display font-bold text-sm text-ds-orange tabular-nums">
-                      {u.powerPoints.toLocaleString()}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3 text-sm text-space-navy/60">
-                    {(u.uid.charCodeAt(2) % 9) + 1}h ago
-                  </td>
-                  <td className="px-5 py-3 relative">
-                    <button
-                      onClick={() => setOpenMenu(openMenu === u.uid ? null : u.uid)}
-                      className="grid place-items-center w-8 h-8 rounded-lg hover:bg-neutral-100 text-space-navy/60"
-                    >
-                      <MoreHorizontal className="w-4 h-4" />
-                    </button>
-                    {openMenu === u.uid && (
-                      <>
-                        <button
-                          aria-label="Close menu"
-                          onClick={() => setOpenMenu(null)}
-                          className="fixed inset-0 z-30"
-                        />
-                        <div className="absolute right-2 top-12 w-48 bg-white rounded-xl shadow-xl border border-neutral-200 overflow-hidden z-40">
-                          <Link
-                            href={`/admin/students/${u.uid}`}
-                            onClick={() => setOpenMenu(null)}
-                            className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-neutral-50 font-display"
-                          >
-                            <Eye className="w-3.5 h-3.5 text-space-navy/55" />
-                            View profile
-                          </Link>
-                          <button className="w-full flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-neutral-50 font-display text-left">
-                            <Mail className="w-3.5 h-3.5 text-space-navy/55" />
-                            Email parent
-                          </button>
-                          <button className="w-full flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-neutral-50 font-display text-left">
-                            <Pause className="w-3.5 h-3.5 text-space-navy/55" />
-                            Pause access
-                          </button>
-                          <hr className="border-neutral-100" />
-                          <button className="w-full flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-red-50 font-display text-red-600 text-left">
-                            <Trash2 className="w-3.5 h-3.5" />
-                            Remove
-                          </button>
-                        </div>
-                      </>
-                    )}
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-5 py-10 text-center text-sm text-space-navy/55">
+                    No students match this filter.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filtered.map((u) => (
+                  <tr key={u.uid} className="border-t border-neutral-100 hover:bg-neutral-50/50 group">
+                    <td className="px-5 py-3">
+                      <Link
+                        href={`/admin/students/${u.uid}`}
+                        className="flex items-center gap-3 tap-scale"
+                      >
+                        <RobotAvatar id={u.avatarId} size={32} />
+                        <span className="font-display font-semibold text-sm text-space-navy group-hover:text-ds-orange transition-colors">
+                          {u.firstName}
+                        </span>
+                      </Link>
+                    </td>
+                    <td className="px-5 py-3 text-sm text-space-navy/65">{u.city}</td>
+                    <td className="px-5 py-3 text-sm text-space-navy/65 tabular-nums">
+                      {u.missionsDone}
+                    </td>
+                    <td className="px-5 py-3">
+                      <span className="font-display font-bold text-sm text-ds-orange tabular-nums">
+                        {u.powerPoints.toLocaleString()}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 text-sm text-space-navy/60">
+                      {(u.uid.charCodeAt(2) % 9) + 1}h ago
+                    </td>
+                    <td className="px-5 py-3 relative">
+                      <button
+                        onClick={() => setOpenMenu(openMenu === u.uid ? null : u.uid)}
+                        className="grid place-items-center w-8 h-8 rounded-lg hover:bg-neutral-100 text-space-navy/60"
+                      >
+                        <MoreHorizontal className="w-4 h-4" />
+                      </button>
+                      {openMenu === u.uid && (
+                        <>
+                          <button
+                            aria-label="Close menu"
+                            onClick={() => setOpenMenu(null)}
+                            className="fixed inset-0 z-30"
+                          />
+                          <div className="absolute right-2 top-12 w-48 bg-white rounded-xl shadow-xl border border-neutral-200 overflow-hidden z-40">
+                            <Link
+                              href={`/admin/students/${u.uid}`}
+                              onClick={() => setOpenMenu(null)}
+                              className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-neutral-50 font-display"
+                            >
+                              <Eye className="w-3.5 h-3.5 text-space-navy/55" />
+                              View profile
+                            </Link>
+                            <button className="w-full flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-neutral-50 font-display text-left">
+                              <Mail className="w-3.5 h-3.5 text-space-navy/55" />
+                              Email parent
+                            </button>
+                            <button className="w-full flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-neutral-50 font-display text-left">
+                              <Pause className="w-3.5 h-3.5 text-space-navy/55" />
+                              Pause access
+                            </button>
+                            <hr className="border-neutral-100" />
+                            <button className="w-full flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-red-50 font-display text-red-600 text-left">
+                              <Trash2 className="w-3.5 h-3.5" />
+                              Remove
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Add modal */}
       {showAdd && (
         <AddParentModal
+          batches={batches}
           onCancel={() => setShowAdd(false)}
-          onCreated={(name) => {
+          onCreated={async (email) => {
             setShowAdd(false);
-            setCreated(name);
+            setCreated(email);
             window.setTimeout(() => setCreated(null), 4000);
+            await loadStudents();
           }}
         />
       )}
 
-      {/* Bulk CSV modal */}
       {showCSV && <BulkCSVModal onCancel={() => setShowCSV(false)} />}
     </div>
   );
 }
 
 function AddParentModal({
+  batches,
   onCancel,
   onCreated,
 }: {
+  batches: Batch[];
   onCancel: () => void;
-  onCreated: (email: string) => void;
+  onCreated: (email: string) => void | Promise<void>;
 }) {
   const [email, setEmail] = useState("");
+  const [childName, setChildName] = useState("");
+  const [childAge, setChildAge] = useState(13);
+  const [city, setCity] = useState<"Chennai" | "Mumbai" | "Online">("Chennai");
+  const [batchId, setBatchId] = useState(batches[0]?.id ?? "");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
   return (
     <div className="fixed inset-0 z-40 grid place-items-center bg-black/50 p-4">
       <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4">
@@ -219,12 +258,34 @@ function AddParentModal({
           Add new parent
         </h2>
         <p className="text-sm text-space-navy/60">
-          We'll send them a welcome email with a one-time login link.
+          We'll create their account and send a welcome email with a one-time login link.
         </p>
+        {err && (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {err}
+          </div>
+        )}
         <form
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
-            onCreated(email);
+            setBusy(true);
+            setErr(null);
+            try {
+              const res = await fetch("/api/admin/students", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ email, childName, childAge, city, batchId }),
+              });
+              const data = (await res.json()) as { ok?: boolean; error?: string };
+              if (!res.ok || !data.ok) {
+                throw new Error(data.error ?? "Create failed");
+              }
+              await onCreated(email);
+            } catch (e) {
+              setErr(e instanceof Error ? e.message : "Failed");
+            } finally {
+              setBusy(false);
+            }
           }}
           className="space-y-3"
         >
@@ -241,6 +302,8 @@ function AddParentModal({
           <Field label="Child first name">
             <input
               required
+              value={childName}
+              onChange={(e) => setChildName(e.target.value)}
               placeholder="Aarav"
               className="w-full rounded-xl border border-neutral-200 focus:border-ds-orange focus:ring-2 focus:ring-ds-orange/15 outline-none p-3 font-body text-sm"
             />
@@ -250,14 +313,19 @@ function AddParentModal({
               <input
                 type="number"
                 required
-                placeholder="13"
+                value={childAge}
+                onChange={(e) => setChildAge(Number(e.target.value))}
                 min={9}
                 max={17}
                 className="w-full rounded-xl border border-neutral-200 focus:border-ds-orange focus:ring-2 focus:ring-ds-orange/15 outline-none p-3 font-body text-sm"
               />
             </Field>
             <Field label="City">
-              <select className="w-full rounded-xl border border-neutral-200 focus:border-ds-orange outline-none p-3 font-body text-sm">
+              <select
+                value={city}
+                onChange={(e) => setCity(e.target.value as typeof city)}
+                className="w-full rounded-xl border border-neutral-200 focus:border-ds-orange outline-none p-3 font-body text-sm"
+              >
                 <option>Chennai</option>
                 <option>Mumbai</option>
                 <option>Online</option>
@@ -265,8 +333,13 @@ function AddParentModal({
             </Field>
           </div>
           <Field label="Assign to batch">
-            <select className="w-full rounded-xl border border-neutral-200 focus:border-ds-orange outline-none p-3 font-body text-sm">
-              {mockBatches.map((b) => (
+            <select
+              value={batchId}
+              onChange={(e) => setBatchId(e.target.value)}
+              required
+              className="w-full rounded-xl border border-neutral-200 focus:border-ds-orange outline-none p-3 font-body text-sm"
+            >
+              {batches.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.name}
                 </option>
@@ -277,16 +350,18 @@ function AddParentModal({
             <button
               type="button"
               onClick={onCancel}
-              className="flex-1 px-4 py-3 rounded-xl bg-white border border-neutral-200 font-display font-semibold text-sm hover:bg-neutral-50"
+              disabled={busy}
+              className="flex-1 px-4 py-3 rounded-xl bg-white border border-neutral-200 font-display font-semibold text-sm hover:bg-neutral-50 disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-ds-orange text-white font-display font-semibold text-sm tap-scale shadow-sm"
+              disabled={busy}
+              className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-ds-orange text-white font-display font-semibold text-sm tap-scale shadow-sm disabled:opacity-50"
             >
               <Mail className="w-4 h-4" />
-              Send welcome
+              {busy ? "Creating..." : "Send welcome"}
             </button>
           </div>
         </form>
@@ -331,7 +406,6 @@ function BulkCSVModal({ onCancel }: { onCancel: () => void }) {
         </button>
 
         <label
-          htmlFor="csv-input"
           className={cn(
             "border-2 border-dashed rounded-xl p-6 text-center transition-colors cursor-pointer block",
             file
@@ -344,7 +418,6 @@ function BulkCSVModal({ onCancel }: { onCancel: () => void }) {
             {file ? `Picked: ${file.name} (${Math.round(file.size / 1024)} KB)` : "Drop CSV or click to browse"}
           </p>
           <input
-            id="csv-input"
             type="file"
             accept=".csv"
             className="hidden"

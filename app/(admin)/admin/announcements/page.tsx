@@ -1,56 +1,110 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Send, Megaphone, Mail, Bell, TrendingUp, Inbox, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { Batch } from "@/lib/types";
 
-const HISTORY = [
+type Announcement = {
+  id: string;
+  title: string;
+  body: string;
+  audience: "all" | "batch";
+  batchId?: string | null;
+  channels: { inApp: boolean; email: boolean };
+  sentAt: string;
+  reads: number;
+  total: number;
+};
+
+const FALLBACK_HISTORY: Announcement[] = [
   {
     id: "a1",
     title: "Live class moved to Saturday 4pm",
     body: "Hey explorers — this week's session got moved by 24 hours due to a scheduling conflict.",
-    audience: "Chennai May 2026",
+    audience: "batch",
+    batchId: "batch-chennai-may-2026",
+    channels: { inApp: true, email: true },
     sentAt: "2026-05-02T09:30:00.000Z",
     reads: 22,
     total: 24,
   },
   {
     id: "a2",
-    title: "New badge unlocked: Streak Star 🔥",
+    title: "New badge unlocked: Streak Star",
     body: "Anyone who logs in for 5 days in a row gets a new badge — keep going!",
-    audience: "All",
+    audience: "all",
+    channels: { inApp: true, email: false },
     sentAt: "2026-04-28T11:00:00.000Z",
     reads: 71,
     total: 73,
-  },
-  {
-    id: "a3",
-    title: "Project showcase tomorrow",
-    body: "We'll feature 3 standout projects from this cohort during the live class.",
-    audience: "Mumbai May 2026",
-    sentAt: "2026-04-25T14:00:00.000Z",
-    reads: 17,
-    total: 18,
-  },
-  {
-    id: "a4",
-    title: "Welcome to AI SuperKids!",
-    body: "Hi parents — your child's enrollment is confirmed. First mission unlocks Monday.",
-    audience: "Online June 2026",
-    sentAt: "2026-04-20T08:00:00.000Z",
-    reads: 28,
-    total: 31,
   },
 ];
 
 export default function AnnouncementsPage() {
   const [audience, setAudience] = useState<"all" | "batch">("all");
-  const [batch, setBatch] = useState("batch-chennai-may-2026");
+  const [batchId, setBatchId] = useState("batch-chennai-may-2026");
+  const [batches, setBatches] = useState<Batch[]>([]);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [email, setEmail] = useState(true);
   const [inApp, setInApp] = useState(true);
   const [sent, setSent] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [history, setHistory] = useState<Announcement[]>(FALLBACK_HISTORY);
+
+  async function loadBatches() {
+    try {
+      const res = await fetch("/api/admin/batches");
+      const data = (await res.json()) as { batches: Batch[] };
+      setBatches(data.batches);
+      if (data.batches[0]) setBatchId(data.batches[0].id);
+    } catch {}
+  }
+  async function loadHistory() {
+    try {
+      const res = await fetch("/api/admin/announcements");
+      const data = (await res.json()) as { announcements: Announcement[] };
+      if (data.announcements && data.announcements.length > 0) {
+        setHistory(data.announcements);
+      }
+    } catch {}
+  }
+  useEffect(() => {
+    loadBatches();
+    loadHistory();
+  }, []);
+
+  async function handleSend(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await fetch("/api/admin/announcements", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          title,
+          body,
+          audience,
+          batchId: audience === "batch" ? batchId : null,
+          channels: { inApp, email },
+        }),
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) throw new Error(data.error ?? "Send failed");
+      setSent(true);
+      setTitle("");
+      setBody("");
+      window.setTimeout(() => setSent(false), 3000);
+      await loadHistory();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <div className="px-6 py-6 space-y-6">
@@ -65,24 +119,15 @@ export default function AnnouncementsPage() {
 
       {/* Full-width KPI strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <RailStat icon={<Inbox className="w-3.5 h-3.5" />} label="Sent (30d)" value={`${HISTORY.length}`} accent="#FF6B35" />
-        <RailStat icon={<Eye className="w-3.5 h-3.5" />} label="Avg read rate" value={`${Math.round(HISTORY.reduce((s, h) => s + (h.reads / h.total) * 100, 0) / HISTORY.length)}%`} accent="#00C853" />
-        <RailStat icon={<TrendingUp className="w-3.5 h-3.5" />} label="Total reach" value={`${HISTORY.reduce((s, h) => s + h.total, 0)}`} accent="#00D4FF" />
+        <RailStat icon={<Inbox className="w-3.5 h-3.5" />} label="Sent (30d)" value={`${history.length}`} accent="#FF6B35" />
+        <RailStat icon={<Eye className="w-3.5 h-3.5" />} label="Avg read rate" value={history.length === 0 ? "—" : `${Math.round(history.reduce((s, h) => s + (h.total > 0 ? (h.reads / h.total) * 100 : 0), 0) / history.length)}%`} accent="#00C853" />
+        <RailStat icon={<TrendingUp className="w-3.5 h-3.5" />} label="Total reach" value={`${history.reduce((s, h) => s + h.total, 0)}`} accent="#00D4FF" />
         <RailStat icon={<Bell className="w-3.5 h-3.5" />} label="Channels active" value="In-app · Email" accent="#A855F7" />
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6 items-start">
         {/* Compose */}
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            setSent(true);
-            setTitle("");
-            setBody("");
-            setTimeout(() => setSent(false), 3000);
-          }}
-          className="kid-card p-6 space-y-4"
-        >
+        <form onSubmit={handleSend} className="kid-card p-6 space-y-4">
           <div className="flex items-center gap-2">
             <span className="grid place-items-center w-9 h-9 rounded-xl bg-ds-orange/15 text-ds-orange">
               <Megaphone className="w-4 h-4" />
@@ -119,15 +164,27 @@ export default function AnnouncementsPage() {
           {audience === "batch" && (
             <Field label="Batch">
               <select
-                value={batch}
-                onChange={(e) => setBatch(e.target.value)}
+                value={batchId}
+                onChange={(e) => setBatchId(e.target.value)}
                 className="w-full rounded-xl border border-neutral-200 focus:border-ds-orange outline-none p-3 font-body text-sm"
               >
-                <option value="batch-chennai-may-2026">Chennai May 2026</option>
-                <option value="batch-mumbai-may-2026">Mumbai May 2026</option>
-                <option value="batch-online-jun-2026">Online June 2026</option>
+                {batches.length === 0 ? (
+                  <option>No batches loaded</option>
+                ) : (
+                  batches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))
+                )}
               </select>
             </Field>
+          )}
+
+          {err && (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              {err}
+            </div>
           )}
 
           <Field label="Title">
@@ -163,10 +220,11 @@ export default function AnnouncementsPage() {
 
           <button
             type="submit"
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-ds-orange text-white font-display font-semibold text-sm tap-scale shadow-sm hover:brightness-110"
+            disabled={busy}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-ds-orange text-white font-display font-semibold text-sm tap-scale shadow-sm hover:brightness-110 disabled:opacity-50"
           >
             <Send className="w-4 h-4" />
-            {sent ? "Sent!" : "Send announcement"}
+            {busy ? "Sending..." : sent ? "Sent!" : "Send announcement"}
           </button>
         </form>
 
@@ -181,8 +239,15 @@ export default function AnnouncementsPage() {
               </span>
             </div>
             <ul className="space-y-3">
-              {HISTORY.map((h) => {
-                const readPct = Math.round((h.reads / h.total) * 100);
+              {history.length === 0 && (
+                <li className="text-center py-8 text-sm text-space-navy/55">No announcements sent yet.</li>
+              )}
+              {history.map((h) => {
+                const readPct = h.total === 0 ? 0 : Math.round((h.reads / h.total) * 100);
+                const audienceLabel =
+                  h.audience === "all"
+                    ? "ALL"
+                    : (batches.find((b) => b.id === h.batchId)?.name ?? "BATCH").toUpperCase();
                 return (
                   <li key={h.id} className="border border-neutral-200 rounded-xl p-4 hover:bg-neutral-50/40 transition-colors">
                     <div className="flex items-start justify-between gap-3">
@@ -190,7 +255,7 @@ export default function AnnouncementsPage() {
                         {h.title}
                       </p>
                       <span className="text-[10px] font-display font-semibold uppercase tracking-wider text-space-navy/55 px-2 py-0.5 rounded-full bg-neutral-100 shrink-0">
-                        {h.audience}
+                        {audienceLabel}
                       </span>
                     </div>
                     <p className="text-xs text-space-navy/60 mt-1 line-clamp-2">{h.body}</p>

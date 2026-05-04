@@ -414,30 +414,40 @@ function UploadZone({
 
   return (
     <div className="space-y-3">
+      {/* Input is INSIDE the label so clicking the zone opens the picker
+          without needing matching for/id (the previous Math.random ids didn't match) */}
       <label
-        htmlFor={`upload-${Math.random()}`}
         className={cn(
           "border-2 border-dashed rounded-xl p-5 text-center transition-colors cursor-pointer block",
           file
             ? "border-neon-green bg-neon-green/5"
             : "border-neutral-200 hover:border-ds-orange",
         )}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const dropped = e.dataTransfer.files?.[0];
+          if (dropped) setFile(dropped);
+        }}
       >
         <Upload className="w-5 h-5 mx-auto text-space-navy/40" />
         <p className="text-sm text-space-navy/65 mt-1 font-display font-semibold">
           {file
             ? `Picked: ${file.name} (${Math.round(file.size / (1024 * 1024))} MB)`
             : isReplacement
-              ? "Drop a new MP4 to replace"
+              ? "Drop a new MP4 to replace, or click to browse"
               : "Drop MP4 or click to browse"}
         </p>
         <p className="text-[10px] text-space-navy/45 mt-0.5">
           Up to 4 GB · auto-transcoded for streaming
         </p>
         <input
-          id={`upload-${Math.random()}`}
           type="file"
-          accept="video/mp4,video/quicktime"
+          accept="video/mp4,video/quicktime,video/*"
           className="hidden"
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
         />

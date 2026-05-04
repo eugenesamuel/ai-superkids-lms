@@ -11,7 +11,8 @@ let cachedApp: App | null = null;
 
 export function getAdminApp(): App | null {
   if (cachedApp) return cachedApp;
-  if (process.env.NEXT_PUBLIC_USE_MOCK_DATA === "true") return null;
+  // Firebase Admin activates when GCP_PROJECT_ID is set + ADC is available.
+  // It is independent from the auth-mode flag (which only affects login UX).
   if (!process.env.GCP_PROJECT_ID) return null;
 
   try {

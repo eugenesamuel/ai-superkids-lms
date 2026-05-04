@@ -63,7 +63,15 @@ export default function AnnouncementsPage() {
         </p>
       </div>
 
-      <div className="grid lg:grid-cols-[1.1fr_1fr] gap-6 items-start">
+      {/* Full-width KPI strip */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <RailStat icon={<Inbox className="w-3.5 h-3.5" />} label="Sent (30d)" value={`${HISTORY.length}`} accent="#FF6B35" />
+        <RailStat icon={<Eye className="w-3.5 h-3.5" />} label="Avg read rate" value={`${Math.round(HISTORY.reduce((s, h) => s + (h.reads / h.total) * 100, 0) / HISTORY.length)}%`} accent="#00C853" />
+        <RailStat icon={<TrendingUp className="w-3.5 h-3.5" />} label="Total reach" value={`${HISTORY.reduce((s, h) => s + h.total, 0)}`} accent="#00D4FF" />
+        <RailStat icon={<Bell className="w-3.5 h-3.5" />} label="Channels active" value="In-app · Email" accent="#A855F7" />
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-6 items-start">
         {/* Compose */}
         <form
           onSubmit={(e) => {
@@ -162,17 +170,8 @@ export default function AnnouncementsPage() {
           </button>
         </form>
 
-        {/* Right column — stats + history */}
-        <div className="space-y-4">
-          {/* Stats trio */}
-          <div className="grid grid-cols-3 gap-3">
-            <RailStat icon={<Inbox className="w-3.5 h-3.5" />} label="Sent (30d)" value={`${HISTORY.length}`} accent="#FF6B35" />
-            <RailStat icon={<Eye className="w-3.5 h-3.5" />} label="Avg read" value={`${Math.round(HISTORY.reduce((s, h) => s + (h.reads / h.total) * 100, 0) / HISTORY.length)}%`} accent="#00C853" />
-            <RailStat icon={<TrendingUp className="w-3.5 h-3.5" />} label="Reach" value={`${HISTORY.reduce((s, h) => s + h.total, 0)}`} accent="#00D4FF" />
-          </div>
-
-          {/* Sent history */}
-          <div className="kid-card p-6">
+        {/* Right column — history only (stats moved to full-width strip above) */}
+        <div className="kid-card p-6">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-display font-bold text-base text-space-navy">
                 Recent sends
@@ -214,7 +213,6 @@ export default function AnnouncementsPage() {
               })}
             </ul>
           </div>
-        </div>
       </div>
     </div>
   );

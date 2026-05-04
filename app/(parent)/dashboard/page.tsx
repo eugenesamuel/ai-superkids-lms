@@ -28,7 +28,7 @@ export default function DashboardPage() {
     .slice(0, 6);
 
   return (
-    <div className="px-6 py-6 grid lg:grid-cols-[1fr_300px] gap-6">
+    <div className="px-6 py-6 grid lg:grid-cols-[1fr_320px] xl:grid-cols-[1fr_360px] gap-6">
       {/* MAIN COLUMN */}
       <div className="space-y-6 min-w-0">
         {/* Hero promo */}
@@ -68,7 +68,7 @@ export default function DashboardPage() {
               View all <ChevronRight className="w-3.5 h-3.5" />
             </Link>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
             {grid.map((m) => {
               const planet = planets.find((p) => p.id === m.planetId);
               if (!planet) return null;

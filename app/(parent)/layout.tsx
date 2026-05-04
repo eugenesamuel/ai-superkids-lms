@@ -10,7 +10,7 @@ export default function ParentLayout({ children }: { children: React.ReactNode }
 
   return (
     <div className="min-h-screen kid-bg pb-20 lg:pb-6">
-      <div className="mx-auto max-w-[1280px] p-3 sm:p-5 lg:p-6">
+      <div className="mx-auto max-w-[1800px] p-3 sm:p-5 lg:p-6">
         <div className="app-shell flex overflow-hidden min-h-[calc(100vh-3rem)]">
           <Sidebar />
           <div className="flex-1 min-w-0 flex flex-col">

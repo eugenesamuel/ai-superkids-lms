@@ -5,7 +5,8 @@ import Link from "next/link";
 import { ExternalLink, Sparkles, BarChart3, Save, Plus } from "lucide-react";
 import { AvatarPicker } from "@/components/lms/AvatarPicker";
 import { StreakCalendar } from "@/components/lms/StreakCalendar";
-import { mockUser, mockStreakDays } from "@/lib/mock-data";
+import { mockStreakDays } from "@/lib/mock-data";
+import { useAppData } from "@/lib/use-app-data";
 import { getLevel } from "@/lib/xp";
 
 const PROJECTS_KEY = "superkids:projects";
@@ -19,9 +20,10 @@ const DEFAULT_PROJECTS: Project[] = [
 ];
 
 export default function ProfilePage() {
-  const lvl = getLevel(mockUser.powerPoints);
-  const [avatar, setAvatar] = useState(mockUser.childAvatarId);
-  const [savedAvatar, setSavedAvatar] = useState(mockUser.childAvatarId);
+  const { user } = useAppData();
+  const lvl = getLevel(user.powerPoints);
+  const [avatar, setAvatar] = useState(user.childAvatarId);
+  const [savedAvatar, setSavedAvatar] = useState(user.childAvatarId);
   const [projects, setProjects] = useState<Project[]>(DEFAULT_PROJECTS);
   const [showAddProject, setShowAddProject] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -84,14 +86,14 @@ export default function ProfilePage() {
         <div className="flex items-center gap-4">
           <div>
             <p className="font-display font-bold text-2xl text-space-navy leading-tight">
-              {mockUser.childName}
+              {user.childName}
             </p>
             <p className="text-xs text-space-navy/50 mt-0.5">
-              {mockUser.city} · Age {mockUser.childAge}
+              {user.city} · Age {user.childAge}
             </p>
           </div>
           <div className="flex-1 grid grid-cols-2 gap-3">
-            <Stat label="Power Points" value={mockUser.powerPoints.toLocaleString()} accent="#FF6B35" />
+            <Stat label="Power Points" value={user.powerPoints.toLocaleString()} accent="#FF6B35" />
             <Stat label="Level" value={`${lvl.level} · ${lvl.title}`} accent="#00D4FF" />
           </div>
         </div>

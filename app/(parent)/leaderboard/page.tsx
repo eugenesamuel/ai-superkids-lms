@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { Lock, Sparkles } from "lucide-react";
 import { LeaderboardRow } from "@/components/lms/LeaderboardRow";
 import { RobotAvatar } from "@/components/lms/AvatarPicker";
-import { mockLeaderboard, mockUser } from "@/lib/mock-data";
+import { useAppData } from "@/lib/use-app-data";
 import { cn } from "@/lib/utils";
 
 const PODIUM_HEIGHTS = ["h-32", "h-24", "h-20"];
@@ -13,11 +13,12 @@ const PODIUM_COLORS = ["#FFD700", "#C0C0C0", "#CD7F32"];
 
 export default function LeaderboardPage() {
   const [tab, setTab] = useState<"week" | "all" | "batch">("all");
+  const { user, leaderboard } = useAppData();
 
-  const sorted = [...mockLeaderboard].sort((a, b) => b.powerPoints - a.powerPoints);
+  const sorted = [...leaderboard].sort((a, b) => b.powerPoints - a.powerPoints);
   const top3 = sorted.slice(0, 3);
   const rest = sorted.slice(3);
-  const youIdx = sorted.findIndex((u) => u.uid === mockUser.uid);
+  const youIdx = sorted.findIndex((u) => u.uid === user.uid);
   const you = sorted[youIdx];
 
   return (
@@ -99,7 +100,7 @@ export default function LeaderboardPage() {
             key={u.uid}
             entry={u}
             rank={i + 4}
-            isYou={u.uid === mockUser.uid}
+            isYou={u.uid === user.uid}
           />
         ))}
       </div>

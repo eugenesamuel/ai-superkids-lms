@@ -6,23 +6,20 @@ import { HeroPromoCard } from "@/components/lms/HeroPromoCard";
 import { RankingCard } from "@/components/lms/RankingCard";
 import { ProgressChart } from "@/components/lms/ProgressChart";
 import { MissionGridCard } from "@/components/lms/MissionGridCard";
-import {
-  mockUser,
-  mockPlanets,
-  mockMissions,
-  mockLeaderboard,
-  mockTrainerNote,
-} from "@/lib/mock-data";
+import { mockTrainerNote } from "@/lib/mock-data";
+import { useAppData } from "@/lib/use-app-data";
 
 export default function DashboardPage() {
-  const currentPlanet = mockPlanets.find((p) => p.status === "current");
+  const { user, planets, missions, leaderboard } = useAppData();
+
+  const currentPlanet = planets.find((p) => p.status === "current");
   const continueTarget = currentPlanet
-    ? mockMissions.find((m) => m.planetId === currentPlanet.id && m.status === "available")
+    ? missions.find((m) => m.planetId === currentPlanet.id && m.status === "available")
     : null;
-  const courseHref = `/course/${currentPlanet?.id ?? mockPlanets[0]?.id ?? "planet-1"}`;
+  const courseHref = `/course/${currentPlanet?.id ?? planets[0]?.id ?? "planet-1"}`;
 
   // Pick the most relevant 6 missions to show in the "Continue learning" grid
-  const grid = mockMissions
+  const grid = missions
     .slice()
     .sort((a, b) => {
       const order = { available: 0, completed: 1, locked: 2 } as const;
@@ -73,7 +70,8 @@ export default function DashboardPage() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {grid.map((m) => {
-              const planet = mockPlanets.find((p) => p.id === m.planetId)!;
+              const planet = planets.find((p) => p.id === m.planetId);
+              if (!planet) return null;
               return (
                 <MissionGridCard
                   key={m.id}
@@ -90,7 +88,7 @@ export default function DashboardPage() {
 
       {/* RIGHT RAIL */}
       <aside className="space-y-4">
-        <RankingCard entries={mockLeaderboard} currentUid={mockUser.uid} />
+        <RankingCard entries={leaderboard} currentUid={user.uid} />
         <ProgressChart />
       </aside>
     </div>

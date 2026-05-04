@@ -3,11 +3,8 @@
 import Link from "next/link";
 import { Download, ChevronLeft, MessageCircle } from "lucide-react";
 import { ParentStatsCard } from "@/components/lms/ParentStatsCard";
-import {
-  mockUser,
-  mockMissions,
-  mockTrainerNote,
-} from "@/lib/mock-data";
+import { mockTrainerNote } from "@/lib/mock-data";
+import { useAppData } from "@/lib/use-app-data";
 import { relativeTime } from "@/lib/utils";
 
 function ParentReportActions({
@@ -79,10 +76,11 @@ function ParentReportActions({
 }
 
 export default function ParentStatsPage() {
-  const totalMissions = mockMissions.length;
-  const completed = mockMissions.filter((m) => m.status === "completed").length;
+  const { user, missions } = useAppData();
+  const totalMissions = missions.length;
+  const completed = missions.filter((m) => m.status === "completed").length;
   const overall = Math.round((completed / totalMissions) * 100);
-  const sessionsThisWeek = mockMissions.filter(
+  const sessionsThisWeek = missions.filter(
     (m) => m.status === "completed" && new Date(m.scheduledAt ?? 0).getTime() > Date.now() - 7 * 86400_000,
   ).length;
 
@@ -97,20 +95,20 @@ export default function ParentStatsPage() {
 
       <div>
         <h2 className="font-display font-bold text-2xl text-space-navy leading-tight">
-          Parent View · {mockUser.childName}'s Progress
+          Parent View · {user.childName}'s Progress
         </h2>
         <p className="text-space-navy/60 text-sm mt-0.5">
-          Last active {relativeTime(mockUser.lastActiveAt)}
+          Last active {relativeTime(user.lastActiveAt)}
         </p>
       </div>
 
       <ParentStatsCard
-        childName={mockUser.childName}
+        childName={user.childName}
         progressPercent={overall}
-        lastActiveLabel={relativeTime(mockUser.lastActiveAt)}
+        lastActiveLabel={relativeTime(user.lastActiveAt)}
         sessionsThisWeek={sessionsThisWeek}
         totalSessions={totalMissions}
-        streakDays={mockUser.streakDays}
+        streakDays={user.streakDays}
       />
 
       <div className="grid sm:grid-cols-2 gap-4">
@@ -119,7 +117,7 @@ export default function ParentStatsPage() {
             Latest sessions
           </p>
           <ul className="mt-3 space-y-2">
-            {mockMissions
+            {missions
               .filter((m) => m.status === "completed")
               .slice(0, 3)
               .map((m) => (
@@ -148,12 +146,12 @@ export default function ParentStatsPage() {
       </div>
 
       <ParentReportActions
-        childName={mockUser.childName}
+        childName={user.childName}
         completed={completed}
         totalMissions={totalMissions}
         sessionsThisWeek={sessionsThisWeek}
-        streakDays={mockUser.streakDays}
-        powerPoints={mockUser.powerPoints}
+        streakDays={user.streakDays}
+        powerPoints={user.powerPoints}
         overall={overall}
       />
     </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ChevronLeft,
   Calendar,
@@ -20,20 +20,72 @@ import {
   mockMissions,
   getRecordingsForBatch,
 } from "@/lib/mock-data";
+import type { Batch, BatchRecording, LeaderboardEntry } from "@/lib/types";
 import { RobotAvatar } from "@/components/lms/AvatarPicker";
 import { BatchRecordingsManager } from "@/components/admin/BatchRecordingsManager";
-import { notFound } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 export default function BatchDetailPage({ params }: { params: { batchId: string } }) {
-  const batch = mockBatches.find((b) => b.id === params.batchId);
-  if (!batch) notFound();
+  const [batch, setBatch] = useState<Batch | null>(
+    mockBatches.find((b) => b.id === params.batchId) ?? null,
+  );
+  const [allStudents, setAllStudents] = useState<LeaderboardEntry[]>(mockLeaderboard);
+  const [recordings, setRecordings] = useState<BatchRecording[]>(
+    getRecordingsForBatch(params.batchId),
+  );
+  const [loading, setLoading] = useState(true);
+  const [notFound404, setNotFound404] = useState(false);
 
   const [tab, setTab] = useState<"roster" | "recordings" | "settings">("roster");
   const [showAdd, setShowAdd] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const roster = mockLeaderboard.filter((u) => batch.parentUids.includes(u.uid));
-  const recordings = getRecordingsForBatch(batch.id);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      fetch(`/api/admin/batches/${params.batchId}`).then((r) => r.ok ? r.json() : null),
+      fetch(`/api/admin/students`).then((r) => r.ok ? r.json() : null),
+      fetch(`/api/admin/recordings?batchId=${params.batchId}`).then((r) => r.ok ? r.json() : null),
+    ]).then(([b, s, r]) => {
+      if (cancelled) return;
+      if (b?.batch) setBatch(b.batch);
+      else if (!mockBatches.find((x) => x.id === params.batchId)) setNotFound404(true);
+      if (s?.students) setAllStudents(s.students);
+      if (r?.recordings) setRecordings(r.recordings);
+      setLoading(false);
+    }).catch(() => {
+      if (cancelled) return;
+      setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [params.batchId]);
+
+  if (notFound404 && !batch) {
+    return (
+      <div className="px-6 py-12 text-center">
+        <h2 className="font-display font-bold text-2xl text-space-navy">Batch not found</h2>
+        <p className="text-sm text-space-navy/60 mt-2">
+          That batch ID doesn't exist. It may have been archived.
+        </p>
+        <Link
+          href="/admin/batches"
+          className="inline-flex items-center gap-2 mt-6 px-5 py-2.5 rounded-xl bg-ds-orange text-white font-display font-semibold text-sm tap-scale shadow-sm hover:brightness-110"
+        >
+          <ChevronLeft className="w-4 h-4" /> All batches
+        </Link>
+      </div>
+    );
+  }
+
+  if (!batch) {
+    return (
+      <div className="px-6 py-12 text-center text-space-navy/55 text-sm">
+        Loading batch...
+      </div>
+    );
+  }
+
+  const roster = allStudents.filter((u) => batch.parentUids.includes(u.uid));
 
   return (
     <div className="px-6 py-6 space-y-6">

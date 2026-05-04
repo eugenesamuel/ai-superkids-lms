@@ -21,31 +21,42 @@ import {
   BookOpen,
   Files,
 } from "lucide-react";
-import {
-  mockPlanets,
-  mockMissions,
-  mockActivities,
-  mockDocuments,
-  mockTrainerNote,
-} from "@/lib/mock-data";
-import { notFound } from "next/navigation";
+import { mockTrainerNote } from "@/lib/mock-data";
+import { useAppData } from "@/lib/use-app-data";
 import type { Activity, Document, Mission } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export default function PlanetPage({ params }: { params: { weekId: string } }) {
-  const planet = mockPlanets.find((p) => p.id === params.weekId);
-  if (!planet) notFound();
+  const data = useAppData();
+  const planet = data.planets.find((p) => p.id === params.weekId);
 
-  const missions = mockMissions
+  if (!planet) {
+    return (
+      <div className="px-6 py-12 text-center">
+        <h2 className="font-display font-bold text-2xl text-space-navy">Planet not found</h2>
+        <p className="text-sm text-space-navy/60 mt-2">
+          That planet ID doesn't exist yet.
+        </p>
+        <Link
+          href="/dashboard"
+          className="inline-flex items-center gap-2 mt-6 px-5 py-2.5 rounded-xl bg-ds-orange text-white font-display font-semibold text-sm tap-scale shadow-sm hover:brightness-110"
+        >
+          <ChevronLeft className="w-4 h-4" /> Back to dashboard
+        </Link>
+      </div>
+    );
+  }
+
+  const missions = data.missions
     .filter((m) => m.planetId === planet.id)
     .sort((a, b) => a.orderIndex - b.orderIndex);
 
   const totalDuration = missions.reduce((sum, m) => sum + m.durationMins, 0);
   const completed = missions.filter((m) => m.status === "completed").length;
-  const totalActivities = mockActivities.filter((a) =>
+  const totalActivities = data.activities.filter((a) =>
     missions.some((m) => m.id === a.missionId),
   ).length;
-  const totalDocs = mockDocuments.filter((d) =>
+  const totalDocs = data.documents.filter((d) =>
     missions.some((m) => m.id === d.missionId),
   ).length;
 
@@ -160,8 +171,8 @@ export default function PlanetPage({ params }: { params: { weekId: string } }) {
                   <MissionRow
                     key={m.id}
                     mission={m}
-                    activities={mockActivities.filter((a) => a.missionId === m.id)}
-                    documents={mockDocuments.filter((d) => d.missionId === m.id)}
+                    activities={data.activities.filter((a) => a.missionId === m.id)}
+                    documents={data.documents.filter((d) => d.missionId === m.id)}
                     planetColor={planet.color}
                     isLast={idx === section.missions.length - 1}
                   />
@@ -219,7 +230,7 @@ export default function PlanetPage({ params }: { params: { weekId: string } }) {
               Other planets
             </h3>
             <ul className="space-y-2">
-              {mockPlanets
+              {data.planets
                 .filter((p) => p.id !== planet.id)
                 .slice(0, 4)
                 .map((p) => (

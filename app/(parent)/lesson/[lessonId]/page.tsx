@@ -8,18 +8,32 @@ import { VideoPlayer } from "@/components/games/VideoPlayer";
 import { ActivityCard } from "@/components/games/ActivityCard";
 import { AIBuddy } from "@/components/AIBuddy";
 import { ConfettiBlast } from "@/components/games/ConfettiBlast";
-import { mockUser, mockMissions, mockActivities, getRecordingFor, getBatchById } from "@/lib/mock-data";
+import { getRecordingFor, getBatchById } from "@/lib/mock-data";
+import { useAppData } from "@/lib/use-app-data";
 import { copy } from "@/lib/copy";
 import { PP_ACTIONS } from "@/lib/xp";
-import { notFound } from "next/navigation";
 
 export default function LessonPage({ params }: { params: { lessonId: string } }) {
-  const mission = mockMissions.find((m) => m.id === params.lessonId);
-  if (!mission) notFound();
+  const { user, missions, activities: allActivities } = useAppData();
+  const mission = missions.find((m) => m.id === params.lessonId);
+
+  if (!mission) {
+    return (
+      <div className="px-6 py-12 text-center">
+        <h2 className="font-display font-bold text-2xl text-space-navy">Mission not found</h2>
+        <Link
+          href="/dashboard"
+          className="inline-flex items-center gap-2 mt-6 px-5 py-2.5 rounded-xl bg-ds-orange text-white font-display font-semibold text-sm tap-scale shadow-sm hover:brightness-110"
+        >
+          <ChevronLeft className="w-4 h-4" /> Back to dashboard
+        </Link>
+      </div>
+    );
+  }
 
   // Look up the recording for the parent's batch — different batches see different recordings.
-  const recording = getRecordingFor(mission.id, mockUser.batchId);
-  const batch = getBatchById(mockUser.batchId);
+  const recording = getRecordingFor(mission.id, user.batchId);
+  const batch = getBatchById(user.batchId);
   const recordingReadyMock = recording?.status === "ready" && recording.recordingPath;
 
   // Fetch a real signed playback URL from the API. Falls back to mock path if API returns null.
@@ -43,8 +57,8 @@ export default function LessonPage({ params }: { params: { lessonId: string } })
 
   const videoSrc = signedSrc ?? (recordingReadyMock ? recording!.recordingPath : null);
 
-  const activities = mockActivities.filter((a) => a.missionId === mission.id);
-  const allMissions = mockMissions.filter((m) => m.planetId === mission.planetId).sort((a, b) => a.orderIndex - b.orderIndex);
+  const activities = allActivities.filter((a) => a.missionId === mission.id);
+  const allMissions = missions.filter((m) => m.planetId === mission.planetId).sort((a, b) => a.orderIndex - b.orderIndex);
   const idx = allMissions.findIndex((m) => m.id === mission.id);
   const prev = allMissions[idx - 1];
   const next = allMissions[idx + 1];
@@ -106,7 +120,7 @@ export default function LessonPage({ params }: { params: { lessonId: string } })
             <p className="text-space-navy/70 font-body">{mission.description}</p>
             <VideoPlayer
               src={videoSrc}
-              watermark={`${mockUser.childName} · AI SuperKids`}
+              watermark={`${user.childName} · AI SuperKids`}
               onComplete={handleVideoComplete}
             />
             {recording?.status === "processing" && (

@@ -6,13 +6,20 @@ import { ChevronLeft, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
 import { ActivityCard } from "@/components/games/ActivityCard";
 import { ConfettiBlast } from "@/components/games/ConfettiBlast";
-import { mockActivities } from "@/lib/mock-data";
+import { useAppData } from "@/lib/use-app-data";
 import { PP_ACTIONS } from "@/lib/xp";
 import { notFound } from "next/navigation";
 
 export default function ActivityPage({ params }: { params: { activityId: string } }) {
-  const activity = mockActivities.find((a) => a.id === params.activityId);
-  if (!activity) notFound();
+  const { activities } = useAppData();
+  const activity = activities.find((a) => a.id === params.activityId);
+  if (!activity) {
+    return (
+      <div className="px-6 py-12 text-center text-sm text-space-navy/60">
+        Loading activity... (or it doesn't exist)
+      </div>
+    );
+  }
 
   const [confettiTick, setConfettiTick] = useState(0);
   const [submitted, setSubmitted] = useState(false);
